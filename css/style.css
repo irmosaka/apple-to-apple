@@ -659,3 +659,92 @@ select:focus {
     justify-content: center;
   }
 }
+
+/* Competitors multi-select box */
+.competitors-box {
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-height: 48px;
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.competitors-box .hint {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.competitor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.competitor-chip:hover {
+  border-color: var(--primary);
+}
+
+.competitor-chip.selected {
+  background: #dbeafe;
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.competitor-chip input {
+  display: none;
+}
+
+/* Multi-column comparison */
+.product-cards.multi {
+  display: grid;
+  gap: 16px;
+}
+
+.product-cards.multi.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.product-cards.multi.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.product-cards.multi.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+@media (max-width: 900px) {
+  .product-cards.multi.cols-3,
+  .product-cards.multi.cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .product-cards.multi {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.features-table th:first-child,
+.features-table td:first-child {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+}
+
+.category-badge {
+  display: inline-block;
+  background: #f1f5f9;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-top: 4px;
+}

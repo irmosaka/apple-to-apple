@@ -78,9 +78,19 @@
               </select>
             </div>
             <div class="form-group">
-              <label>لینک تصویر</label>
-              <input type="url" name="image" placeholder="https://...">
+              <label>دسته‌بندی</label>
+              <div style="display:flex; gap:6px;">
+                <select name="category" style="flex:1">
+                  <option value="">انتخاب کنید...</option>
+                </select>
+                <button type="button" class="btn btn-outline btn-sm" onclick="addNewCategory()" title="افزودن دسته جدید">+</button>
+              </div>
             </div>
+          </div>
+
+          <div class="form-group">
+            <label>لینک تصویر</label>
+            <input type="url" name="image" placeholder="https://...">
           </div>
 
           <div class="form-group">
@@ -89,7 +99,14 @@
               <input type="url" name="digikalaUrl" placeholder="https://www.digikala.com/product/..." style="flex:1">
               <button type="button" class="btn btn-outline btn-sm" onclick="tryFetchDigikala()">تلاش برای دریافت</button>
             </div>
-            <small style="color:var(--text-muted); font-size:0.8rem;">به خاطر محدودیت CORS مرورگر، اسکرپ مستقیم کار نمی‌کنه. مشخصات رو دستی وارد کن.</small>
+            <small style="color:var(--text-muted); font-size:0.8rem;">به خاطر محدودیت CORS، مشخصات رو دستی وارد کن.</small>
+          </div>
+
+          <div class="form-group" id="competitorsSection">
+            <label>رقبای این محصول (می‌تونی چندتا انتخاب کنی)</label>
+            <div id="competitorsSelectContainer" class="competitors-box" style="min-height:40px;">
+              <span style="color:var(--text-muted);font-size:0.9rem;">ابتدا نوع و دسته را مشخص کنید</span>
+            </div>
           </div>
 
           <div class="form-group">

@@ -1,8 +1,7 @@
 // ===================== Data Management =====================
-const STORAGE_KEY = 'appleToApple_products';
+const STORAGE_KEY = 'appleToApple_data_v2';
 
-async function loadProducts() {
-  // اول از localStorage بخون (برای تغییرات ادمین)
+async function loadData() {
   const local = localStorage.getItem(STORAGE_KEY);
   if (local) {
     try {
@@ -12,19 +11,21 @@ async function loadProducts() {
     }
   }
 
-  // اگر نبود، از فایل JSON لود کن
   try {
     const res = await fetch('data/products.json');
     const data = await res.json();
-    return data.products || [];
+    return {
+      categories: data.categories || [],
+      products: data.products || []
+    };
   } catch (e) {
     console.error('Failed to load products.json', e);
-    return [];
+    return { categories: [], products: [] };
   }
 }
 
-function saveProducts(products) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 function formatPrice(price) {
@@ -34,100 +35,183 @@ function formatPrice(price) {
 
 // ===================== Comparison Page =====================
 async function initComparisonPage() {
-  const products = await loadProducts();
+  const data = await loadData();
+  let { categories, products } = data;
+
+  const categorySelect = document.getElementById('categorySelect');
   const selectA = document.getElementById('productA');
-  const selectB = document.getElementById('productB');
+  const competitorsBox = document.getElementById('competitorsCheckboxes');
   const resultEl = document.getElementById('comparisonResult');
   const emptyEl = document.getElementById('emptyState');
 
-  if (!selectA || !selectB) return;
+  if (!selectA) return;
 
-  // پر کردن سلکت‌ها
-  products.forEach(p => {
-    const label = `${p.name} (${p.type === 'own' ? 'محصول من' : 'رقیب'})`;
-    selectA.innerHTML += `<option value="${p.id}">${label}</option>`;
-    selectB.innerHTML += `<option value="${p.id}">${label}</option>`;
+  // پر کردن دسته‌ها
+  categories.forEach(cat => {
+    categorySelect.innerHTML += `<option value="${cat}">${cat}</option>`;
   });
 
-  function renderComparison() {
-    const idA = selectA.value;
-    const idB = selectB.value;
+  function getFilteredOwnProducts() {
+    const cat = categorySelect.value;
+    return products.filter(p => {
+      if (p.type !== 'own') return false;
+      if (cat && p.category !== cat) return false;
+      return true;
+    });
+  }
 
-    if (!idA || !idB || idA === idB) {
+  function getAvailableCompetitors(ownId) {
+    const own = products.find(p => p.id === ownId);
+    if (!own) return [];
+
+    const cat = categorySelect.value || own.category;
+    // اول رقباهای لینک‌شده، بعد بقیه هم‌دسته
+    const linked = (own.competitors || [])
+      .map(id => products.find(p => p.id === id))
+      .filter(Boolean);
+
+    const others = products.filter(p =>
+      p.id !== ownId &&
+      p.type === 'competitor' &&
+      (!cat || p.category === cat) &&
+      !(own.competitors || []).includes(p.id)
+    );
+
+    return [...linked, ...others];
+  }
+
+  function populateOwnProducts() {
+    const ownList = getFilteredOwnProducts();
+    selectA.innerHTML = '<option value="">انتخاب کنید...</option>';
+    ownList.forEach(p => {
+      selectA.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+    });
+    competitorsBox.innerHTML = '<span class="hint">اول محصول خودت رو انتخاب کن</span>';
+    resultEl.classList.add('hidden');
+    emptyEl.classList.remove('hidden');
+  }
+
+  function populateCompetitors() {
+    const ownId = selectA.value;
+    if (!ownId) {
+      competitorsBox.innerHTML = '<span class="hint">اول محصول خودت رو انتخاب کن</span>';
+      return;
+    }
+
+    const comps = getAvailableCompetitors(ownId);
+    if (comps.length === 0) {
+      competitorsBox.innerHTML = '<span class="hint">رقیبی در این دسته یافت نشد</span>';
+      return;
+    }
+
+    // پیش‌فرض رقباهای لینک‌شده رو انتخاب کن
+    const own = products.find(p => p.id === ownId);
+    const defaultSelected = new Set(own.competitors || []);
+
+    competitorsBox.innerHTML = comps.map(p => {
+      const checked = defaultSelected.has(p.id) ? 'selected' : '';
+      return `
+        <label class="competitor-chip ${checked}" data-id="${p.id}">
+          <input type="checkbox" value="${p.id}" ${checked ? 'checked' : ''}>
+          ${p.brand ? p.brand + ' · ' : ''}${p.name.length > 30 ? p.name.substring(0, 30) + '…' : p.name}
+        </label>
+      `;
+    }).join('');
+
+    // کلیک روی چیپ
+    competitorsBox.querySelectorAll('.competitor-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        e.preventDefault();
+        const cb = chip.querySelector('input');
+        cb.checked = !cb.checked;
+        chip.classList.toggle('selected', cb.checked);
+        renderComparison();
+      });
+    });
+
+    renderComparison();
+  }
+
+  function getSelectedCompetitors() {
+    return Array.from(competitorsBox.querySelectorAll('input:checked')).map(cb => cb.value);
+  }
+
+  function renderComparison() {
+    const ownId = selectA.value;
+    const compIds = getSelectedCompetitors();
+
+    if (!ownId || compIds.length === 0) {
       resultEl.classList.add('hidden');
       emptyEl.classList.remove('hidden');
       return;
     }
 
-    const prodA = products.find(p => p.id === idA);
-    const prodB = products.find(p => p.id === idB);
+    const own = products.find(p => p.id === ownId);
+    const comps = compIds.map(id => products.find(p => p.id === id)).filter(Boolean);
 
-    if (!prodA || !prodB) return;
+    if (!own || comps.length === 0) return;
 
     emptyEl.classList.add('hidden');
     resultEl.classList.remove('hidden');
 
-    // جمع‌آوری همه ویژگی‌ها
-    const allKeys = new Set([
-      ...Object.keys(prodA.features || {}),
-      ...Object.keys(prodB.features || {})
-    ]);
+    // همه محصولات برای مقایسه
+    const all = [own, ...comps];
+    const colClass = `cols-${Math.min(all.length, 4)}`;
+
+    // کارت‌ها
+    const cardsHtml = all.map((p, i) => `
+      <div class="product-card">
+        <div class="card-header">
+          <span class="${i === 0 ? 'badge-own' : 'badge-competitor'}">${i === 0 ? 'محصول من' : 'رقیب'}</span>
+          <img src="${p.image || 'https://via.placeholder.com/140?text=No+Image'}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/140?text=No+Image'">
+          <h3>${p.name}</h3>
+          <div class="brand">${p.brand || ''}</div>
+          <div class="price">${formatPrice(p.price)}</div>
+          ${p.category ? `<div class="category-badge">${p.category}</div>` : ''}
+          ${p.digikalaUrl ? `<a class="digikala-link" href="${p.digikalaUrl}" target="_blank">مشاهده در دیجی‌کالا ←</a>` : ''}
+        </div>
+      </div>
+    `).join('');
+
+    // جدول ویژگی‌ها
+    const allKeys = new Set();
+    all.forEach(p => Object.keys(p.features || {}).forEach(k => allKeys.add(k)));
 
     let featuresHtml = '';
     allKeys.forEach(key => {
-      const valA = prodA.features?.[key] || '—';
-      const valB = prodB.features?.[key] || '—';
+      const values = all.map(p => p.features?.[key] || '—');
 
-      // تشخیص ساده برتری (اگر عدد باشه)
-      let classA = 'equal';
-      let classB = 'equal';
+      // تشخیص برتری نسبت به محصول خودمان
+      const ownVal = values[0];
+      const numOwn = parseFloat(String(ownVal).replace(/[^\d.]/g, ''));
+      const isWeight = key.includes('وزن') || key.toLowerCase().includes('weight');
 
-      const numA = parseFloat(String(valA).replace(/[^\d.]/g, ''));
-      const numB = parseFloat(String(valB).replace(/[^\d.]/g, ''));
-
-      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
-        // برای وزن کمتر بهتره، بقیه بیشتر بهتر
-        const isWeight = key.includes('وزن') || key.toLowerCase().includes('weight');
+      const classes = values.map((val, i) => {
+        if (i === 0) return 'equal';
+        const num = parseFloat(String(val).replace(/[^\d.]/g, ''));
+        if (isNaN(numOwn) || isNaN(num) || numOwn === num) return 'equal';
         if (isWeight) {
-          if (numA < numB) { classA = 'better'; classB = 'worse'; }
-          else { classA = 'worse'; classB = 'better'; }
-        } else {
-          if (numA > numB) { classA = 'better'; classB = 'worse'; }
-          else { classA = 'worse'; classB = 'better'; }
+          return num < numOwn ? 'better' : 'worse';
         }
-      }
+        return num > numOwn ? 'better' : 'worse';
+      });
 
       featuresHtml += `
         <tr>
           <td>${key}</td>
-          <td class="${classA}">${valA}</td>
-          <td class="${classB}">${valB}</td>
+          ${values.map((v, i) => `<td class="${classes[i]}">${v}</td>`).join('')}
         </tr>
       `;
     });
 
+    const headers = all.map(p => {
+      const short = p.name.length > 20 ? p.name.substring(0, 20) + '…' : p.name;
+      return `<th>${short}</th>`;
+    }).join('');
+
     resultEl.innerHTML = `
-      <div class="product-cards">
-        <div class="product-card">
-          <div class="card-header">
-            <span class="badge-own">محصول من</span>
-            <img src="${prodA.image || 'https://via.placeholder.com/140?text=No+Image'}" alt="${prodA.name}" onerror="this.src='https://via.placeholder.com/140?text=No+Image'">
-            <h3>${prodA.name}</h3>
-            <div class="brand">${prodA.brand || ''}</div>
-            <div class="price">${formatPrice(prodA.price)}</div>
-            ${prodA.digikalaUrl ? `<a class="digikala-link" href="${prodA.digikalaUrl}" target="_blank">مشاهده در دیجی‌کالا ←</a>` : ''}
-          </div>
-        </div>
-        <div class="product-card">
-          <div class="card-header">
-            <span class="badge-competitor">رقیب</span>
-            <img src="${prodB.image || 'https://via.placeholder.com/140?text=No+Image'}" alt="${prodB.name}" onerror="this.src='https://via.placeholder.com/140?text=No+Image'">
-            <h3>${prodB.name}</h3>
-            <div class="brand">${prodB.brand || ''}</div>
-            <div class="price">${formatPrice(prodB.price)}</div>
-            ${prodB.digikalaUrl ? `<a class="digikala-link" href="${prodB.digikalaUrl}" target="_blank">مشاهده در دیجی‌کالا ←</a>` : ''}
-          </div>
-        </div>
+      <div class="product-cards multi ${colClass}">
+        ${cardsHtml}
       </div>
 
       <div class="features-table">
@@ -135,8 +219,7 @@ async function initComparisonPage() {
           <thead>
             <tr>
               <th>ویژگی</th>
-              <th>${prodA.name.length > 25 ? prodA.name.substring(0, 25) + '…' : prodA.name}</th>
-              <th>${prodB.name.length > 25 ? prodB.name.substring(0, 25) + '…' : prodB.name}</th>
+              ${headers}
             </tr>
           </thead>
           <tbody>
@@ -147,13 +230,22 @@ async function initComparisonPage() {
     `;
   }
 
-  selectA.addEventListener('change', renderComparison);
-  selectB.addEventListener('change', renderComparison);
+  categorySelect.addEventListener('change', () => {
+    populateOwnProducts();
+  });
+
+  selectA.addEventListener('change', () => {
+    populateCompetitors();
+  });
+
+  populateOwnProducts();
 }
 
 // ===================== Admin Page =====================
 async function initAdminPage() {
-  let products = await loadProducts();
+  let data = await loadData();
+  let { categories, products } = data;
+
   const listEl = document.getElementById('productList');
   const modal = document.getElementById('productModal');
   const form = document.getElementById('productForm');
@@ -169,6 +261,10 @@ async function initAdminPage() {
     setTimeout(() => toast.classList.remove('show'), 3000);
   }
 
+  function persist() {
+    saveData({ categories, products });
+  }
+
   function renderList() {
     if (products.length === 0) {
       listEl.innerHTML = `
@@ -181,23 +277,87 @@ async function initAdminPage() {
       return;
     }
 
-    listEl.innerHTML = products.map(p => `
-      <div class="product-item">
-        <img src="${p.image || 'https://via.placeholder.com/80?text=No+Image'}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/80?text=No+Image'">
-        <div class="info">
-          <h3>${p.name}</h3>
-          <div class="meta">
-            ${p.brand || 'بدون برند'} · ${formatPrice(p.price)} · 
-            <strong>${p.type === 'own' ? 'محصول من' : 'رقیب'}</strong>
-            · ${Object.keys(p.features || {}).length} ویژگی
+    // گروه‌بندی بر اساس دسته
+    const byCat = {};
+    products.forEach(p => {
+      const cat = p.category || 'بدون دسته';
+      if (!byCat[cat]) byCat[cat] = [];
+      byCat[cat].push(p);
+    });
+
+    let html = '';
+    Object.entries(byCat).forEach(([cat, items]) => {
+      html += `<h3 style="margin:20px 0 12px; font-size:1.1rem; color:var(--text-muted);">${cat} (${items.length})</h3>`;
+      html += items.map(p => {
+        const compCount = (p.competitors || []).length;
+        return `
+          <div class="product-item">
+            <img src="${p.image || 'https://via.placeholder.com/80?text=No+Image'}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/80?text=No+Image'">
+            <div class="info">
+              <h3>${p.name}</h3>
+              <div class="meta">
+                ${p.brand || 'بدون برند'} · ${formatPrice(p.price)} · 
+                <strong>${p.type === 'own' ? 'محصول من' : 'رقیب'}</strong>
+                ${p.type === 'own' && compCount > 0 ? ` · ${compCount} رقیب` : ''}
+                · ${Object.keys(p.features || {}).length} ویژگی
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn btn-outline btn-sm" onclick="editProduct('${p.id}')">ویرایش</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteProduct('${p.id}')">حذف</button>
+            </div>
           </div>
-        </div>
-        <div class="actions">
-          <button class="btn btn-outline btn-sm" onclick="editProduct('${p.id}')">ویرایش</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteProduct('${p.id}')">حذف</button>
-        </div>
-      </div>
-    `).join('');
+        `;
+      }).join('');
+    });
+
+    listEl.innerHTML = html;
+  }
+
+  function fillCategorySelect(selected = '') {
+    const sel = form.category;
+    sel.innerHTML = '<option value="">انتخاب یا تایپ کنید...</option>';
+    categories.forEach(c => {
+      sel.innerHTML += `<option value="${c}" ${c === selected ? 'selected' : ''}>${c}</option>`;
+    });
+  }
+
+  function fillCompetitorsSelect(ownId, selectedIds = []) {
+    const container = document.getElementById('competitorsSelectContainer');
+    if (!container) return;
+
+    // فقط محصولات رقیب هم‌دسته (یا همه رقبا)
+    const currentCat = form.category.value;
+    const available = products.filter(p =>
+      p.type === 'competitor' &&
+      p.id !== ownId &&
+      (!currentCat || p.category === currentCat || !p.category)
+    );
+
+    if (available.length === 0) {
+      container.innerHTML = '<span style="color:var(--text-muted);font-size:0.9rem;">هنوز رقیبی در این دسته تعریف نشده</span>';
+      return;
+    }
+
+    container.innerHTML = available.map(p => {
+      const checked = selectedIds.includes(p.id) ? 'checked' : '';
+      return `
+        <label class="competitor-chip ${checked ? 'selected' : ''}" style="margin:4px;">
+          <input type="checkbox" name="compIds" value="${p.id}" ${checked}>
+          ${p.brand ? p.brand + ' · ' : ''}${p.name.length > 28 ? p.name.substring(0, 28) + '…' : p.name}
+        </label>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.competitor-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        if (e.target.tagName === 'INPUT') return;
+        e.preventDefault();
+        const cb = chip.querySelector('input');
+        cb.checked = !cb.checked;
+        chip.classList.toggle('selected', cb.checked);
+      });
+    });
   }
 
   window.openAddModal = function () {
@@ -207,6 +367,10 @@ async function initAdminPage() {
     document.getElementById('featuresContainer').innerHTML = '';
     addFeatureRow();
     addFeatureRow();
+    fillCategorySelect();
+    fillCompetitorsSelect(null, []);
+    // نمایش بخش رقبا فقط برای محصول خودمان
+    document.getElementById('competitorsSection').style.display = 'block';
     modal.classList.add('open');
   };
 
@@ -223,11 +387,17 @@ async function initAdminPage() {
     form.type.value = p.type || 'own';
     form.digikalaUrl.value = p.digikalaUrl || '';
 
+    fillCategorySelect(p.category || '');
+
     const container = document.getElementById('featuresContainer');
     container.innerHTML = '';
     const feats = p.features || {};
     Object.entries(feats).forEach(([k, v]) => addFeatureRow(k, v));
     if (Object.keys(feats).length === 0) addFeatureRow();
+
+    // رقبا
+    document.getElementById('competitorsSection').style.display = p.type === 'own' ? 'block' : 'none';
+    fillCompetitorsSelect(id, p.competitors || []);
 
     modal.classList.add('open');
   };
@@ -235,7 +405,11 @@ async function initAdminPage() {
   window.deleteProduct = function (id) {
     if (!confirm('آیا مطمئنی می‌خوای این محصول رو حذف کنی؟')) return;
     products = products.filter(p => p.id !== id);
-    saveProducts(products);
+    // پاک کردن از لیست رقباهای دیگران
+    products.forEach(p => {
+      if (p.competitors) p.competitors = p.competitors.filter(c => c !== id);
+    });
+    persist();
     renderList();
     showToast('محصول حذف شد');
   };
@@ -256,6 +430,16 @@ async function initAdminPage() {
     container.appendChild(div);
   };
 
+  // تغییر نوع محصول → نمایش/مخفی کردن بخش رقبا
+  form.type.addEventListener('change', () => {
+    document.getElementById('competitorsSection').style.display =
+      form.type.value === 'own' ? 'block' : 'none';
+  });
+
+  form.category.addEventListener('change', () => {
+    fillCompetitorsSelect(editingId, []);
+  });
+
   form.addEventListener('submit', function (e) {
     e.preventDefault();
 
@@ -266,14 +450,26 @@ async function initAdminPage() {
       if (k) features[k] = v;
     });
 
+    // دسته جدید؟
+    let cat = form.category.value.trim();
+    if (cat && !categories.includes(cat)) {
+      categories.push(cat);
+    }
+
+    // رقباهای انتخاب‌شده
+    const selectedComps = Array.from(document.querySelectorAll('input[name="compIds"]:checked'))
+      .map(cb => cb.value);
+
     const product = {
       id: editingId || 'p' + Date.now(),
       name: form.name.value.trim(),
       brand: form.brand.value.trim(),
+      category: cat,
       price: parseInt(form.price.value) || 0,
       image: form.image.value.trim(),
       type: form.type.value,
       digikalaUrl: form.digikalaUrl.value.trim(),
+      competitors: form.type.value === 'own' ? selectedComps : [],
       features
     };
 
@@ -286,15 +482,15 @@ async function initAdminPage() {
       showToast('محصول جدید اضافه شد');
     }
 
-    saveProducts(products);
+    persist();
     renderList();
     closeModal();
   });
 
   // Export / Import
   window.exportJSON = function () {
-    const data = { products };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const exportData = { categories, products };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -314,9 +510,10 @@ async function initAdminPage() {
       const reader = new FileReader();
       reader.onload = (ev) => {
         try {
-          const data = JSON.parse(ev.target.result);
-          products = data.products || data;
-          saveProducts(products);
+          const parsed = JSON.parse(ev.target.result);
+          categories = parsed.categories || [];
+          products = parsed.products || parsed;
+          persist();
           renderList();
           showToast('داده‌ها با موفقیت وارد شدند');
         } catch (err) {
@@ -328,21 +525,27 @@ async function initAdminPage() {
     input.click();
   };
 
-  // تلاش برای پر کردن از لینک دیجی‌کالا (ترکیبی)
   window.tryFetchDigikala = async function () {
     const url = form.digikalaUrl.value.trim();
     if (!url || !url.includes('digikala.com')) {
       showToast('لینک معتبر دیجی‌کالا وارد کن', 'error');
       return;
     }
-
     showToast('در حال تلاش برای دریافت اطلاعات... (به خاطر CORS ممکنه موفق نشه)');
-    
-    // چون CORS اجازه نمی‌ده، فقط پیام می‌دیم و کاربر باید دستی پر کنه
-    // در نسخه واقعی می‌تونی از یه پروکسی یا Cloudflare Worker استفاده کنی
     setTimeout(() => {
-      showToast('به خاطر محدودیت مرورگر (CORS) اسکرپ مستقیم ممکن نیست. مشخصات رو دستی وارد کن یا از افزونه مرورگر استفاده کن.', 'error');
+      showToast('به خاطر محدودیت مرورگر (CORS) اسکرپ مستقیم ممکن نیست. مشخصات رو دستی وارد کن.', 'error');
     }, 1500);
+  };
+
+  // افزودن دسته جدید
+  window.addNewCategory = function () {
+    const name = prompt('نام دسته جدید را وارد کنید:');
+    if (name && name.trim() && !categories.includes(name.trim())) {
+      categories.push(name.trim());
+      fillCategorySelect(name.trim());
+      persist();
+      showToast('دسته جدید اضافه شد');
+    }
   };
 
   renderList();

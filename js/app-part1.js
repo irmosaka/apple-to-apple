@@ -162,6 +162,7 @@ async function initComparisonPage() {
           <h3>${p.name}</h3>
           <div class="brand">${p.brand || ''}</div>
           <div class="price">${formatPrice(p.price)}</div>
+          ${p.lastPriceUpdate ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">به‌روز: ${new Intl.DateTimeFormat('fa-IR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(p.lastPriceUpdate))}</div>` : ''}
           ${p.category ? `<div class="category-badge">${p.category}</div>` : ''}
           ${p.digikalaUrl ? `<a class="digikala-link" href="${p.digikalaUrl}" target="_blank">مشاهده در دیجی‌کالا ←</a>` : ''}
         </div>

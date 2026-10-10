@@ -86,26 +86,39 @@ function buildLocalReport(all, allKeys) {
 }
 
 async function callGemini(apiKey, prompt) {
-  const model = 'gemini-2.0-flash';
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
-    model + ':generateContent?key=' + encodeURIComponent(apiKey);
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 1024 }
-    })
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    const msg = (data.error && data.error.message) || ('Gemini HTTP ' + res.status);
-    throw new Error(msg);
+  const models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest'];
+  let lastErr = null;
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    try {
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+        model + ':generateContent?key=' + encodeURIComponent(apiKey);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 1024 }
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = (data.error && data.error.message) || ('Gemini HTTP ' + res.status);
+        lastErr = new Error(msg);
+        continue;
+      }
+      const parts = data.candidates && data.candidates[0] && data.candidates[0].content &&
+        data.candidates[0].content.parts;
+      if (!parts || !parts.length) {
+        lastErr = new Error('پاسخ خالی از Gemini');
+        continue;
+      }
+      return parts.map(function (p) { return p.text || ''; }).join('');
+    } catch (e) {
+      lastErr = e;
+    }
   }
-  const parts = data.candidates && data.candidates[0] && data.candidates[0].content &&
-    data.candidates[0].content.parts;
-  if (!parts || !parts.length) throw new Error('پاسخ خالی از Gemini');
-  return parts.map(function (p) { return p.text || ''; }).join('');
+  throw lastErr || new Error('هیچ مدل Gemini در دسترس نبود');
 }
 
 async function callGroq(apiKey, prompt) {
@@ -182,7 +195,7 @@ function renderAiSettings(container) {
           '<option value="groq"' + (cfg.provider === 'groq' ? ' selected' : '') + '>Groq</option>' +
           '<option value="deepseek"' + (cfg.provider === 'deepseek' ? ' selected' : '') + '>DeepSeek</option>' +
         '</select>' +
-        '<input id="aiApiKey" type="password" placeholder="API Key" value="' + (cfg.apiKey || '').replace(/"/g, '&quot;') + '" ' +
+        '<input id="aiApiKey" type="password" placeholder="API Key" value="' + (cfg.apiKey || '').replace(/"/g, '"') + '" ' +
           'style="flex:1;min-width:180px;padding:8px;border-radius:8px;border:1px solid #e2e8f0;font-family:inherit">' +
         '<button type="button" class="btn btn-primary btn-sm" id="aiSaveKey">ذخیره</button>' +
       '</div>' +

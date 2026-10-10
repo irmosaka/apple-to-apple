@@ -234,30 +234,83 @@ async function initComparisonPage() {
     const modal = document.getElementById('priceHistoryModal');
     const body = document.getElementById('phBody');
     const title = document.getElementById('phTitle');
-    title.textContent = 'تاریخچه قیمت · ' + (name || '');
+    title.textContent = 'قیمت و روند · ' + (name || '');
     body.innerHTML = '<p style="color:var(--text-muted)">در حال دریافت از دیجی‌کالا...</p>';
     modal.classList.add('open');
     try {
       const id = extractDkpId(dkUrl);
       if (!id) throw new Error('آیدی محصول پیدا نشد');
-      const chart = await mcpCall('product_price_chart', { id: id });
-      let html = '';
-      if (chart.current_price_toman) {
-        html += '<p><strong>قیمت فعلی:</strong> ' + formatPrice(chart.current_price_toman) + '</p>';
+
+      let chart = null;
+      try {
+        chart = await mcpCall('product_price_chart', { id: id });
+      } catch (e) {
+        console.warn('price_chart failed', e);
       }
-      if (Array.isArray(chart.series) && chart.series.length) {
+
+      const hasSeries = chart && Array.isArray(chart.series) && chart.series.length > 0 &&
+        chart.series.some(function (s) { return (s.points || []).length > 0; });
+      const hasItems = chart && Array.isArray(chart.items) && chart.items.length > 0;
+      const historyOk = hasSeries || hasItems || (chart && chart.history_available === true);
+
+      let html = '';
+
+      if (historyOk && hasSeries) {
+        if (chart.current_price_toman) {
+          html += '<p><strong>قیمت فعلی:</strong> ' + formatPrice(chart.current_price_toman) + '</p>';
+        }
         chart.series.forEach(function (s) {
           html += '<h4 style="margin:12px 0 6px">' + (s.color || s.title || 'سری') +
             (s.cheapest_in_window_toman ? ' · کمینه: ' + formatPrice(s.cheapest_in_window_toman) : '') + '</h4>';
           html += '<ul class="price-history-list">';
-          (s.points || []).slice(-15).reverse().forEach(function (pt) {
+          (s.points || []).slice(-20).reverse().forEach(function (pt) {
             html += '<li><span>' + (pt.day || pt.date || '') + '</span><strong>' +
               formatPrice(pt.price_toman || pt.price) + '</strong></li>';
           });
           html += '</ul>';
         });
       } else {
-        html += '<p>تاریخچه قیمت در دسترس نیست.</p>';
+        const details = await mcpCall('product_details', {
+          id: id, include_specs: false, include_comments: 0
+        });
+        html += '<div class="price-summary">';
+        if (details.price_toman) {
+          html += '<p><strong>قیمت فعلی:</strong> ' + formatPrice(details.price_toman) + '</p>';
+        }
+        if (details.price_before_toman) {
+          html += '<p><strong>قبل از تخفیف:</strong> <span style="text-decoration:line-through;color:#888">' +
+            formatPrice(details.price_before_toman) + '</span>';
+          if (details.discount_percent) {
+            html += ' <span style="color:#16a34a;font-weight:600">(' + details.discount_percent + '% تخفیف)</span>';
+          }
+          html += '</p>';
+        }
+        if (details.lowest_price_30d_toman) {
+          html += '<p><strong>کمترین قیمت ۳۰ روز اخیر:</strong> ' +
+            formatPrice(details.lowest_price_30d_toman) + '</p>';
+          if (details.price_toman && details.lowest_price_30d_toman < details.price_toman) {
+            const diff = details.price_toman - details.lowest_price_30d_toman;
+            html += '<p style="color:#b45309;font-size:0.9rem">الان حدود ' +
+              formatPrice(diff) + ' گران‌تر از کف ۳۰ روزه است.</p>';
+          } else if (details.price_toman && details.lowest_price_30d_toman >= details.price_toman) {
+            html += '<p style="color:#16a34a;font-size:0.9rem">قیمت نزدیک به کف ۳۰ روز اخیر است.</p>';
+          }
+        }
+        if (details.cheaper_offer && details.cheaper_offer.price_toman) {
+          html += '<p><strong>پیشنهاد ارزان‌تر:</strong> ' +
+            formatPrice(details.cheaper_offer.price_toman) +
+            (details.cheaper_offer.seller ? ' · ' + details.cheaper_offer.seller : '') +
+            (details.cheaper_offer.saves_toman ? ' (صرفه‌جویی ' + formatPrice(details.cheaper_offer.saves_toman) + ')' : '') +
+            '</p>';
+        }
+        html += '</div>';
+        html += '<p style="margin-top:14px;font-size:0.85rem;color:var(--text-muted)">' +
+          'نمودار روزبه‌روز تاریخچه موقتاً از سمت API دیجی‌کالا در دسترس نیست؛ ' +
+          'خلاصه قیمت و کف ۳۰ روز از مشخصات محصول نمایش داده شد. ' +
+          'نمودار کامل را در <a href="' + (details.url || dkUrl) + '" target="_blank" rel="noopener">صفحه دیجی‌کالا</a> ببین.</p>';
+        if (chart && chart.message) {
+          html += '<p style="font-size:0.75rem;color:#94a3b8">' + chart.message + '</p>';
+        }
       }
       body.innerHTML = html;
     } catch (err) {

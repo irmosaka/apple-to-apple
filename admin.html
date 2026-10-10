@@ -96,10 +96,10 @@
           <div class="form-group">
             <label>لینک دیجی‌کالا (اختیاری)</label>
             <div style="display:flex; gap:8px;">
-              <input type="url" name="digikalaUrl" placeholder="https://www.digikala.com/product/..." style="flex:1">
-              <button type="button" class="btn btn-outline btn-sm" onclick="tryFetchDigikala()">تلاش برای دریافت</button>
+              <input type="url" name="digikalaUrl" placeholder="https://www.digikala.com/product/dkp-... یا فقط آیدی" style="flex:1">
+              <button type="button" class="btn btn-primary btn-sm" onclick="tryFetchDigikala()">دریافت از دیجی‌کالا</button>
             </div>
-            <small style="color:var(--text-muted); font-size:0.8rem;">به خاطر محدودیت CORS، مشخصات رو دستی وارد کن.</small>
+            <small style="color:var(--text-muted); font-size:0.8rem;">لینک محصول یا آیدی dkp را بگذار و دکمه را بزن — مشخصات خودکار پر می‌شود. اگر rate-limit شد ۲۰ ثانیه صبر کن و دوباره بزن.</small>
           </div>
 
           <div class="form-group" id="competitorsSection">

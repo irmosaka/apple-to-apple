@@ -9,14 +9,17 @@ async function initAdminPage() {
   let editingId = null;
   let pendingLastUpdate = null;
   if (!listEl) return;
+  if (listEl.dataset.ready === '1') return;
+  listEl.dataset.ready = '1';
 
-  function showToast(msg, type = 'success') {
+  function showToast(msg, type) {
+    type = type || 'success';
     const toast = document.getElementById('toast');
     toast.textContent = msg;
-    toast.className = `toast ${type} show`;
-    setTimeout(() => toast.classList.remove('show'), 3500);
+    toast.className = 'toast ' + type + ' show';
+    setTimeout(function () { toast.classList.remove('show'); }, 3500);
   }
-  function persist() { saveData({ categories, products }); }
+  function persist() { saveData({ categories: categories, products: products }); }
 
   function formatLastUpdate(iso) {
     if (!iso) return '';
@@ -34,15 +37,16 @@ async function initAdminPage() {
       return;
     }
     const byCat = {};
-    products.forEach(p => {
+    products.forEach(function (p) {
       const cat = p.category || 'بدون دسته';
       if (!byCat[cat]) byCat[cat] = [];
       byCat[cat].push(p);
     });
     let html = '';
-    Object.entries(byCat).forEach(([cat, items]) => {
+    Object.keys(byCat).forEach(function (cat) {
+      const items = byCat[cat];
       html += '<h3 style="margin:20px 0 12px;font-size:1.1rem;color:var(--text-muted)">' + cat + ' (' + items.length + ')</h3>';
-      html += items.map(p => {
+      html += items.map(function (p) {
         const compCount = (p.competitors || []).length;
         const last = formatLastUpdate(p.lastPriceUpdate);
         const hasDk = !!(p.digikalaUrl && typeof extractDkpId === 'function' && extractDkpId(p.digikalaUrl));
@@ -68,7 +72,7 @@ async function initAdminPage() {
     selected = selected || '';
     const sel = form.category;
     sel.innerHTML = '<option value="">انتخاب...</option>';
-    categories.forEach(c => {
+    categories.forEach(function (c) {
       sel.innerHTML += '<option value="' + c + '"' + (c === selected ? ' selected' : '') + '>' + c + '</option>';
     });
   }
@@ -78,18 +82,20 @@ async function initAdminPage() {
     const container = document.getElementById('competitorsSelectContainer');
     if (!container) return;
     const currentCat = form.category.value;
-    const available = products.filter(p => p.id !== ownId && (!currentCat || p.category === currentCat || !p.category));
+    const available = products.filter(function (p) {
+      return p.id !== ownId && (!currentCat || p.category === currentCat || !p.category);
+    });
     if (available.length === 0) {
       container.innerHTML = '<span style="color:var(--text-muted);font-size:0.9rem">محصول دیگری نیست</span>';
       return;
     }
-    container.innerHTML = available.map(p => {
+    container.innerHTML = available.map(function (p) {
       const checked = selectedIds.indexOf(p.id) >= 0 ? 'checked' : '';
       const name = p.name.length > 28 ? p.name.substring(0, 28) + '…' : p.name;
       return '<label class="competitor-chip ' + (checked ? 'selected' : '') + '" style="margin:4px">' +
         '<input type="checkbox" name="compIds" value="' + p.id + '" ' + checked + '>' + name + '</label>';
     }).join('');
-    container.querySelectorAll('.competitor-chip').forEach(chip => {
+    container.querySelectorAll('.competitor-chip').forEach(function (chip) {
       chip.addEventListener('click', function (e) {
         if (e.target.tagName === 'INPUT') return;
         e.preventDefault();
@@ -117,8 +123,7 @@ async function initAdminPage() {
     showToast('در حال به‌روزرسانی قیمت...');
     try {
       const r = await refreshOnePrice(p);
-      persist();
-      renderList();
+      persist(); renderList();
       if (r.changed) showToast('قیمت به‌روز شد: ' + formatPrice(r.oldPrice) + ' ← ' + formatPrice(r.newPrice));
       else showToast('قیمت تغییری نکرد · زمان به‌روزرسانی ثبت شد');
     } catch (err) {
@@ -131,10 +136,7 @@ async function initAdminPage() {
     const list = products.filter(function (p) {
       return p.digikalaUrl && extractDkpId(p.digikalaUrl);
     });
-    if (list.length === 0) {
-      showToast('هیچ محصولی با لینک دیجی‌کالا نیست', 'error');
-      return;
-    }
+    if (list.length === 0) { showToast('هیچ محصولی با لینک دیجی‌کالا نیست', 'error'); return; }
     if (!confirm(list.length + ' محصول پیدا شد. فقط قیمت‌ها به‌روز شوند؟')) return;
     const btn = document.getElementById('btnRefreshAllPrices');
     if (btn) { btn.disabled = true; btn.textContent = 'در حال به‌روزرسانی...'; }
@@ -144,21 +146,17 @@ async function initAdminPage() {
       showToast('به‌روزرسانی ' + (i + 1) + ' از ' + list.length + '...');
       try {
         const r = await refreshOnePrice(p);
-        ok++;
-        if (r.changed) changed++;
-        persist();
-        renderList();
+        ok++; if (r.changed) changed++;
+        persist(); renderList();
         if (i < list.length - 1) await new Promise(function (r) { setTimeout(r, 1500); });
       } catch (err) {
-        console.error(p.id, err);
-        fail++;
+        console.error(p.id, err); fail++;
         if (/rate|15-30|temporarily/i.test(String(err.message || ''))) {
           showToast('محدودیت نرخ — ۲۰ ثانیه صبر...');
           await new Promise(function (r) { setTimeout(r, 20000); });
           try {
             const r = await refreshOnePrice(p);
-            ok++; fail--;
-            if (r.changed) changed++;
+            ok++; fail--; if (r.changed) changed++;
             persist(); renderList();
           } catch (e2) { console.error(e2); }
         }
@@ -169,8 +167,7 @@ async function initAdminPage() {
   };
 
   window.openAddModal = function () {
-    editingId = null;
-    pendingLastUpdate = null;
+    editingId = null; pendingLastUpdate = null;
     modalTitle.textContent = 'افزودن محصول جدید';
     form.reset();
     document.getElementById('featuresContainer').innerHTML = '';
@@ -227,8 +224,7 @@ async function initAdminPage() {
   };
 
   form.type.addEventListener('change', function () {
-    document.getElementById('competitorsSection').style.display =
-      form.type.value === 'own' ? 'block' : 'none';
+    document.getElementById('competitorsSection').style.display = form.type.value === 'own' ? 'block' : 'none';
   });
   form.category.addEventListener('change', function () { fillCompetitorsSelect(editingId, []); });
 
@@ -357,7 +353,11 @@ async function initAdminPage() {
 
 function bootApp() {
   if (document.getElementById('productA')) initComparisonPage();
-  if (document.getElementById('productList')) initAdminPage();
+  if (document.getElementById('productList')) {
+    if (!document.getElementById('loginGate') || (typeof isAdminLoggedIn === 'function' && isAdminLoggedIn())) {
+      initAdminPage();
+    }
+  }
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootApp);

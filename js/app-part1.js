@@ -321,43 +321,134 @@ async function initComparisonPage() {
   function showAiAnalysis(all, allKeys) {
     const box = document.getElementById('aiAnalysisBox');
     if (!box) return;
-    let text = 'تحلیل مقایسه محصولات:\n\n';
-    all.forEach(function (p, i) {
-      text += (i + 1) + ') ' + p.name + (p.brand ? ' (' + p.brand + ')' : '') +
-        ' — قیمت: ' + formatPrice(p.price) + '\n';
-    });
-    text += '\nتفاوت ویژگی‌ها:\n';
+
+    function numFrom(val) {
+      if (val == null || val === '—') return NaN;
+      const n = parseFloat(String(val).replace(/[^\d.]/g, ''));
+      return isNaN(n) ? NaN : n;
+    }
+
+    const diffs = [];
     allKeys.forEach(function (key) {
       const vals = all.map(function (p) { return (p.features && p.features[key]) || '—'; });
-      const unique = {};
-      vals.forEach(function (v) { unique[v] = true; });
-      if (Object.keys(unique).length > 1) {
-        text += '• ' + key + ': ' + vals.join(' | ') + '\n';
+      const uniq = {};
+      vals.forEach(function (v) { uniq[v] = true; });
+      if (Object.keys(uniq).length > 1) diffs.push({ key: key, vals: vals });
+    });
+
+    const byPrice = all.slice().filter(function (p) { return p.price > 0; })
+      .sort(function (a, b) { return a.price - b.price; });
+    const cheapest = byPrice[0];
+    const expensive = byPrice[byPrice.length - 1];
+
+    const winCounts = all.map(function () { return 0; });
+    const weightKeys = /وزن|weight/i;
+    diffs.forEach(function (d) {
+      const nums = d.vals.map(numFrom);
+      if (nums.every(function (n) { return !isNaN(n); })) {
+        const isW = weightKeys.test(d.key);
+        let best = 0;
+        for (let i = 1; i < nums.length; i++) {
+          if (isW ? nums[i] < nums[best] : nums[i] > nums[best]) best = i;
+        }
+        const sorted = nums.slice().sort(function (a, b) { return isW ? a - b : b - a; });
+        if (sorted[0] !== sorted[1]) winCounts[best]++;
       }
     });
-    text += '\nجمع‌بندی پیشنهادی:\n';
-    let best = all[0];
-    let bestScore = -1;
+
+    let bestIdx = 0;
+    for (let i = 1; i < winCounts.length; i++) {
+      if (winCounts[i] > winCounts[bestIdx]) bestIdx = i;
+    }
+
+    let valueBest = all[0];
+    let valueScore = -1;
     all.forEach(function (p) {
-      const featCount = Object.keys(p.features || {}).length;
-      const price = p.price || 1e15;
-      const score = featCount * 1000000 / Math.max(price, 1);
-      if (score > bestScore) { bestScore = score; best = p; }
+      const fc = Object.keys(p.features || {}).length;
+      const pr = p.price || 1e15;
+      const sc = fc * 1e6 / Math.max(pr, 1);
+      if (sc > valueScore) { valueScore = sc; valueBest = p; }
     });
-    text += 'از نظر نسبت ویژگی به قیمت، «' + best.name + '» گزینه متوازن‌تری به نظر می‌رسد. ';
-    text += 'برای تصمیم نهایی گارانتی، خدمات پس از فروش و نظرات خریداران را هم در نظر بگیرید.\n';
+
+    let lines = [];
+    lines.push('📊 تحلیل مقایسه (' + all.length + ' محصول)');
+    lines.push('');
+    lines.push('۱) معرفی کوتاه');
+    all.forEach(function (p) {
+      lines.push('  • ' + p.name + (p.brand ? ' | برند: ' + p.brand : '') +
+        ' | قیمت: ' + formatPrice(p.price) +
+        (p.category ? ' | دسته: ' + p.category : ''));
+    });
+
+    lines.push('');
+    lines.push('۲) قیمت');
+    if (cheapest && expensive && cheapest.id !== expensive.id) {
+      lines.push('  • ارزان‌ترین: «' + cheapest.name + '» با ' + formatPrice(cheapest.price));
+      lines.push('  • گران‌ترین: «' + expensive.name + '» با ' + formatPrice(expensive.price));
+      const gap = expensive.price - cheapest.price;
+      const pct = Math.round(gap * 100 / Math.max(cheapest.price, 1));
+      lines.push('  • اختلاف قیمت: حدود ' + formatPrice(gap) + ' (حدود ' + pct + '٪)');
+    } else {
+      lines.push('  • قیمت‌ها نزدیک به هم هستند یا فقط یک محصول قیمت دارد.');
+    }
+
+    lines.push('');
+    lines.push('۳) تفاوت‌های مهم مشخصات (' + diffs.length + ' مورد)');
+    if (diffs.length === 0) {
+      lines.push('  • مشخصات ثبت‌شده تقریباً یکسان است.');
+    } else {
+      diffs.slice(0, 12).forEach(function (d) {
+        lines.push('  • ' + d.key + ':');
+        d.vals.forEach(function (v, i) {
+          lines.push('      – ' + (all[i].brand || all[i].name.substring(0, 20)) + ': ' + v);
+        });
+      });
+      if (diffs.length > 12) lines.push('  • … و ' + (diffs.length - 12) + ' تفاوت دیگر');
+    }
+
+    lines.push('');
+    lines.push('۴) امتیاز نسبی (بر اساس عددهای قابل‌مقایسه در مشخصات)');
+    all.forEach(function (p, i) {
+      lines.push('  • «' + p.name + '»: ' + winCounts[i] + ' برتری عددی');
+    });
+
+    lines.push('');
+    lines.push('۵) جمع‌بندی و پیشنهاد');
+    lines.push('  • از نظر ارزش (تعداد مشخصات نسبت به قیمت): «' + valueBest.name + '»');
+    lines.push('  • از نظر برتری عددی مشخصات: «' + all[bestIdx].name + '»');
+    if (cheapest) lines.push('  • اگر بودجه محدود است: «' + cheapest.name + '»');
+    lines.push('  • نکته: گارانتی، خدمات پس از فروش، موجودی و نظرات واقعی خریداران را هم چک کنید.');
+    lines.push('');
+    lines.push('— تحلیل رایگان محلی (بدون کلید API) · اپل‌تو‌اپل');
+
+    const report = lines.join('\n');
+
+    const extPrompt = 'تو یک مشاور خرید هستی. این مقایسه محصولات را به فارسی، کوتاه و کاربردی تحلیل کن. ' +
+      'نقاط قوت/ضعف هر کدام، برای چه کاربری مناسب‌تر است، و یک توصیه نهایی بده:\n\n' + report;
+
+    const grokUrl = 'https://grok.com/?q=' + encodeURIComponent(extPrompt.substring(0, 1800));
+    const chatgptUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(extPrompt.substring(0, 1800));
 
     box.classList.remove('hidden');
     box.innerHTML =
-      '<div class="ai-box-header"><strong>✨ تحلیل هوشمند (محلی)</strong>' +
-      '<button type="button" class="btn btn-outline btn-sm" id="btnCopyAi">کپی متن</button></div>' +
-      '<pre class="ai-text">' + text.replace(/</g, '<') + '</pre>' +
-      '<p class="ai-hint">این تحلیل بدون API خارجی ساخته شده. می‌توانی متن را کپی و در ChatGPT/Grok برای تحلیل عمیق‌تر بفرستی.</p>';
+      '<div class="ai-box-header">' +
+        '<strong>✨ تحلیل هوشمند (رایگان)</strong>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button type="button" class="btn btn-outline btn-sm" id="btnCopyAi">کپی متن</button>' +
+          '<a class="btn btn-primary btn-sm" href="' + grokUrl + '" target="_blank" rel="noopener">تحلیل در Grok</a>' +
+          '<a class="btn btn-outline btn-sm" href="' + chatgptUrl + '" target="_blank" rel="noopener">تحلیل در ChatGPT</a>' +
+        '</div>' +
+      '</div>' +
+      '<pre class="ai-text" id="aiReportText"></pre>' +
+      '<p class="ai-hint">تحلیل بالا کاملاً رایگان و روی مرورگر ساخته شده. برای تحلیل عمیق‌تر با مدل‌های قوی، دکمه‌های Grok یا ChatGPT را بزن.</p>';
+
+    const pre = document.getElementById('aiReportText');
+    if (pre) pre.textContent = report;
 
     const copyBtn = document.getElementById('btnCopyAi');
     if (copyBtn) {
       copyBtn.onclick = function () {
-        navigator.clipboard.writeText(text).then(function () {
+        navigator.clipboard.writeText(report).then(function () {
           copyBtn.textContent = 'کپی شد ✓';
           setTimeout(function () { copyBtn.textContent = 'کپی متن'; }, 2000);
         });

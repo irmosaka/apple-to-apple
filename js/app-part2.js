@@ -244,7 +244,12 @@ async function initAdminPage() {
   renderList();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function bootApp() {
   if (document.getElementById('productA')) initComparisonPage();
   if (document.getElementById('productList')) initAdminPage();
-});
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootApp);
+} else {
+  bootApp();
+}

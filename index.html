@@ -5,41 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>اپل‌تو‌اپل | مقایسه محصول به محصول</title>
   <link rel="stylesheet" href="css/style.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <header class="header">
     <div class="container">
-      <div class="logo">
-        <span class="logo-icon">⚖️</span>
-        <h1>اپل‌تو‌اپل</h1>
-      </div>
+      <div class="logo"><span class="logo-icon">⚖️</span><h1>اپل‌تو‌اپل</h1></div>
       <nav>
         <a href="index.html" class="active">مقایسه</a>
         <a href="admin.html">داشبورد مدیریت</a>
       </nav>
     </div>
   </header>
-
   <main class="container">
     <section class="hero">
       <h2>مقایسه دقیق محصول به محصول</h2>
       <p>محصول خودت رو با چند رقیب از یک دسته‌بندی مقایسه کن</p>
     </section>
-
     <section class="compare-controls">
       <div class="select-group">
         <label for="categorySelect">دسته‌بندی</label>
-        <select id="categorySelect">
-          <option value="">همه دسته‌ها</option>
-        </select>
+        <select id="categorySelect"><option value="">همه دسته‌ها</option></select>
       </div>
       <div class="select-group">
         <label for="productA">محصول اصلی</label>
-        <select id="productA">
-          <option value="">انتخاب کنید...</option>
-        </select>
+        <select id="productA"><option value="">انتخاب کنید...</option></select>
       </div>
       <div class="select-group" style="flex:1.5">
         <label>رقبا (می‌تونی چندتا انتخاب کنی)</label>
@@ -48,23 +38,16 @@
         </div>
       </div>
     </section>
-
     <section id="comparisonResult" class="comparison-result hidden"></section>
-
     <section id="emptyState" class="empty-state">
       <div class="empty-icon">📊</div>
       <h3>محصول اصلی و حداقل یک رقیب انتخاب کن</h3>
       <p>از منوی بالا دسته‌بندی، محصول و رقبا را انتخاب کن</p>
     </section>
   </main>
-
-  <footer class="footer">
-    <div class="container">
-      <p>ساخته شده برای مقایسه شفاف و عادلانه محصولات</p>
-    </div>
-  </footer>
-
+  <footer class="footer"><div class="container"><p>ساخته شده برای مقایسه شفاف و عادلانه محصولات</p></div></footer>
   <script src="js/digikala.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/app-part1.js"></script>
+  <script src="js/app-part2.js"></script>
 </body>
 </html>

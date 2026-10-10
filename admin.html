@@ -17,10 +17,24 @@
       </nav>
     </div>
   </header>
-  <main class="container">
+
+  <div id="loginGate" class="login-gate">
+    <h2>ورود به پنل مدیریت</h2>
+    <p>برای دسترسی به داشبورد، رمز عبور را وارد کنید.</p>
+    <div id="loginError" class="login-error" style="display:none"></div>
+    <input type="password" id="adminPassword" placeholder="رمز عبور" autocomplete="current-password">
+    <button class="btn btn-primary" style="width:100%" onclick="tryAdminLogin()">ورود</button>
+    <p style="margin-top:14px;font-size:0.8rem;color:var(--text-muted)">اولین بار؟ رمزی که می‌زنید به‌عنوان رمز پنل ذخیره می‌شود.</p>
+  </div>
+
+  <main class="container" id="adminMain" style="display:none">
     <div class="admin-header">
       <h2>مدیریت محصولات</h2>
-      <button class="btn btn-primary" onclick="openAddModal()">+ افزودن محصول جدید</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="changeAdminPassword()">تغییر رمز</button>
+        <button class="btn btn-outline btn-sm" onclick="adminLogout()">خروج</button>
+        <button class="btn btn-primary" onclick="openAddModal()">+ افزودن محصول جدید</button>
+      </div>
     </div>
     <div class="export-box">
       <p><strong>نکته:</strong> برای دائمی شدن، Export کن و جایگزین data/products.json کن.</p>
@@ -32,6 +46,7 @@
     </div>
     <div id="productList" class="product-list"></div>
   </main>
+
   <div class="modal-overlay" id="productModal">
     <div class="modal">
       <div class="modal-header"><h3 id="modalTitle">افزودن محصول</h3><button class="modal-close" onclick="closeModal()">×</button></div>
@@ -59,5 +74,6 @@
   <script src="js/digikala.js"></script>
   <script src="js/app-part1.js"></script>
   <script src="js/app-part2.js"></script>
+  <script src="js/admin-auth.js"></script>
 </body>
 </html>

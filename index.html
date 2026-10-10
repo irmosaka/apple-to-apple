@@ -25,22 +25,27 @@
   <main class="container">
     <section class="hero">
       <h2>مقایسه دقیق محصول به محصول</h2>
-      <p>محصول خودت رو با رقیب از دیجی‌کالا مقایسه کن و ببین کجا برتری داری</p>
+      <p>محصول خودت رو با چند رقیب از یک دسته‌بندی مقایسه کن</p>
     </section>
 
     <section class="compare-controls">
       <div class="select-group">
-        <label for="productA">محصول اول (محصول خودت)</label>
+        <label for="categorySelect">دسته‌بندی</label>
+        <select id="categorySelect">
+          <option value="">همه دسته‌ها</option>
+        </select>
+      </div>
+      <div class="select-group">
+        <label for="productA">محصول من</label>
         <select id="productA">
           <option value="">انتخاب کنید...</option>
         </select>
       </div>
-      <div class="vs-badge">VS</div>
-      <div class="select-group">
-        <label for="productB">محصول دوم (رقیب)</label>
-        <select id="productB">
-          <option value="">انتخاب کنید...</option>
-        </select>
+      <div class="select-group" style="flex:1.5">
+        <label>رقبا (می‌تونی چندتا انتخاب کنی)</label>
+        <div id="competitorsCheckboxes" class="competitors-box">
+          <span class="hint">اول محصول خودت رو انتخاب کن</span>
+        </div>
       </div>
     </section>
 
@@ -50,8 +55,8 @@
 
     <section id="emptyState" class="empty-state">
       <div class="empty-icon">📊</div>
-      <h3>دو محصول انتخاب کن تا مقایسه شروع بشه</h3>
-      <p>از منوی بالا محصول خودت و رقیب رو انتخاب کن</p>
+      <h3>محصول خودت و حداقل یک رقیب انتخاب کن</h3>
+      <p>از منوی بالا دسته‌بندی، محصول و رقبا رو انتخاب کن</p>
     </section>
   </main>
 

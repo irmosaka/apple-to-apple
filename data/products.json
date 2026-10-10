@@ -1,12 +1,19 @@
 {
+  "categories": [
+    "گوشی موبایل",
+    "لپ‌تاپ",
+    "هدفون و هندزفری"
+  ],
   "products": [
     {
       "id": "p1",
       "name": "گوشی موبایل سامسونگ مدل Galaxy A55",
       "brand": "سامسونگ",
+      "category": "گوشی موبایل",
       "price": 24500000,
       "image": "https://via.placeholder.com/300x300/2563eb/ffffff?text=Galaxy+A55",
       "type": "own",
+      "competitors": ["p2", "p3"],
       "digikalaUrl": "",
       "features": {
         "صفحه نمایش": "۶.۶ اینچ Super AMOLED",
@@ -25,9 +32,11 @@
       "id": "p2",
       "name": "گوشی موبایل شیائومی مدل Redmi Note 13 Pro",
       "brand": "شیائومی",
+      "category": "گوشی موبایل",
       "price": 18900000,
       "image": "https://via.placeholder.com/300x300/d97706/ffffff?text=Redmi+Note+13",
       "type": "competitor",
+      "competitors": [],
       "digikalaUrl": "https://www.digikala.com/product/dkp-1234567/",
       "features": {
         "صفحه نمایش": "۶.۶۷ اینچ AMOLED",
@@ -40,6 +49,71 @@
         "شارژ سریع": "۶۷ وات",
         "سیستم عامل": "Android 13",
         "وزن": "۱۹۹ گرم"
+      }
+    },
+    {
+      "id": "p3",
+      "name": "گوشی موبایل ریلمی مدل Realme 12 Pro+",
+      "brand": "ریلمی",
+      "category": "گوشی موبایل",
+      "price": 21500000,
+      "image": "https://via.placeholder.com/300x300/16a34a/ffffff?text=Realme+12+Pro",
+      "type": "competitor",
+      "competitors": [],
+      "digikalaUrl": "https://www.digikala.com/product/dkp-7654321/",
+      "features": {
+        "صفحه نمایش": "۶.۷ اینچ AMOLED",
+        "رزولوشن": "۱۰۸۰ × ۲۴۱۲",
+        "پردازنده": "Snapdragon 7s Gen 2",
+        "رم": "۱۲ گیگابایت",
+        "حافظه داخلی": "۲۵۶ گیگابایت",
+        "دوربین اصلی": "۵۰ مگاپیکسل",
+        "باتری": "۵۰۰۰ میلی‌آمپرساعت",
+        "شارژ سریع": "۶۷ وات",
+        "سیستم عامل": "Android 14",
+        "وزن": "۱۹۰ گرم"
+      }
+    },
+    {
+      "id": "p4",
+      "name": "لپ‌تاپ ایسوس مدل VivoBook 15",
+      "brand": "ایسوس",
+      "category": "لپ‌تاپ",
+      "price": 38500000,
+      "image": "https://via.placeholder.com/300x300/7c3aed/ffffff?text=VivoBook+15",
+      "type": "own",
+      "competitors": ["p5"],
+      "digikalaUrl": "",
+      "features": {
+        "پردازنده": "Intel Core i7-1355U",
+        "رم": "۱۶ گیگابایت",
+        "حافظه داخلی": "۵۱۲ گیگابایت SSD",
+        "صفحه نمایش": "۱۵.۶ اینچ FHD",
+        "کارت گرافیک": "Intel Iris Xe",
+        "باتری": "۴۲ وات‌ساعت",
+        "وزن": "۱.۷ کیلوگرم",
+        "سیستم عامل": "Windows 11"
+      }
+    },
+    {
+      "id": "p5",
+      "name": "لپ‌تاپ لنوو مدل IdeaPad Slim 3",
+      "brand": "لنوو",
+      "category": "لپ‌تاپ",
+      "price": 32900000,
+      "image": "https://via.placeholder.com/300x300/dc2626/ffffff?text=IdeaPad+Slim",
+      "type": "competitor",
+      "competitors": [],
+      "digikalaUrl": "https://www.digikala.com/product/dkp-998877/",
+      "features": {
+        "پردازنده": "Intel Core i5-12450H",
+        "رم": "۱۶ گیگابایت",
+        "حافظه داخلی": "۵۱۲ گیگابایت SSD",
+        "صفحه نمایش": "۱۵.۶ اینچ FHD",
+        "کارت گرافیک": "Intel UHD",
+        "باتری": "۴۵ وات‌ساعت",
+        "وزن": "۱.۶ کیلوگرم",
+        "سیستم عامل": "Windows 11"
       }
     }
   ]

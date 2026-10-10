@@ -1,5 +1,8 @@
-/** On-page AI — free API keys (Gemini / Groq / DeepSeek). Works without Puter (Iran-friendly). */
+/** On-page AI — Worker proxy (secure) or direct free API keys */
 const AI_CFG_KEY = 'appleToApple_aiCfg';
+
+/** After deploy, put your worker URL here (public is OK — key is NOT here) */
+const DEFAULT_WORKER_URL = '';
 
 function formatPriceAi(price) {
   if (typeof formatPrice === 'function') return formatPrice(price);
@@ -173,8 +176,28 @@ async function callDeepSeek(apiKey, prompt) {
     data.choices[0].message.content) || '';
 }
 
+async function callWorker(workerUrl, prompt) {
+  const res = await fetch(workerUrl.replace(/\/$/, ''), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: prompt })
+  });
+  const data = await res.json().catch(function () { return {}; });
+  if (!res.ok) {
+    throw new Error((data && data.error) || ('Worker HTTP ' + res.status));
+  }
+  if (!data.text) throw new Error('پاسخ خالی از Worker');
+  return data.text;
+}
+
 async function callFreeAi(prompt) {
   const cfg = loadAiCfg();
+  const workerUrl = (cfg.workerUrl || DEFAULT_WORKER_URL || '').trim();
+
+  if (workerUrl) {
+    return callWorker(workerUrl, prompt);
+  }
+
   const provider = cfg.provider || 'gemini';
   const key = (cfg.apiKey || '').trim();
   if (!key) throw new Error('NO_KEY');
@@ -186,34 +209,44 @@ async function callFreeAi(prompt) {
 
 function renderAiSettings(container) {
   const cfg = loadAiCfg();
+  const wurl = cfg.workerUrl || DEFAULT_WORKER_URL || '';
   container.innerHTML =
     '<div class="ai-settings" style="margin-bottom:12px;padding:12px;border:1px solid var(--border,#e2e8f0);border-radius:10px;background:#f8fafc">' +
-      '<div style="font-weight:600;margin-bottom:8px">تنظیم API رایگان (یک‌بار)</div>' +
+      '<div style="font-weight:600;margin-bottom:8px">اتصال امن (Cloudflare Worker)</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
-        '<select id="aiProvider" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0;font-family:inherit">' +
-          '<option value="gemini"' + ((cfg.provider || 'gemini') === 'gemini' ? ' selected' : '') + '>Google Gemini (پیشنهادی)</option>' +
-          '<option value="groq"' + (cfg.provider === 'groq' ? ' selected' : '') + '>Groq</option>' +
-          '<option value="deepseek"' + (cfg.provider === 'deepseek' ? ' selected' : '') + '>DeepSeek</option>' +
-        '</select>' +
-        '<input id="aiApiKey" type="password" placeholder="API Key" value="' + (cfg.apiKey || '').replace(/"/g, '"') + '" ' +
-          'style="flex:1;min-width:180px;padding:8px;border-radius:8px;border:1px solid #e2e8f0;font-family:inherit">' +
+        '<input id="aiWorkerUrl" type="url" placeholder="https://apple-to-apple-ai.xxx.workers.dev" value="' +
+          String(wurl).replace(/"/g, '"') + '" ' +
+          'style="flex:1;min-width:220px;padding:8px;border-radius:8px;border:1px solid #e2e8f0;font-family:inherit">' +
         '<button type="button" class="btn btn-primary btn-sm" id="aiSaveKey">ذخیره</button>' +
       '</div>' +
-      '<div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6">' +
-        'پیشنهاد برای ایران: <strong>Gemini</strong> — کلید رایگان از ' +
-        '<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a><br>' +
-        'DeepSeek: <a href="https://platform.deepseek.com" target="_blank" rel="noopener">platform.deepseek.com</a> · ' +
-        'Groq: <a href="https://console.groq.com" target="_blank" rel="noopener">console.groq.com</a><br>' +
-        'کلید فقط روی مرورگر خودت ذخیره می‌شود (localStorage).' +
+      '<div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;margin-bottom:10px">' +
+        'کلید Gemini روی Worker به‌صورت Secret می‌ماند (نه در گیت‌هاب، نه در مرورگر). ' +
+        'راهنما: پوشه <code>worker/</code> در ریپو.' +
       '</div>' +
+      '<details><summary style="cursor:pointer;font-size:0.85rem">روش مستقیم (فقط خودت — کلید در مرورگر)</summary>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">' +
+          '<select id="aiProvider" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0;font-family:inherit">' +
+            '<option value="gemini"' + ((cfg.provider || 'gemini') === 'gemini' ? ' selected' : '') + '>Gemini</option>' +
+            '<option value="groq"' + (cfg.provider === 'groq' ? ' selected' : '') + '>Groq</option>' +
+            '<option value="deepseek"' + (cfg.provider === 'deepseek' ? ' selected' : '') + '>DeepSeek</option>' +
+          '</select>' +
+          '<input id="aiApiKey" type="password" placeholder="API Key (اختیاری)" value="' +
+            (cfg.apiKey || '').replace(/"/g, '"') + '" style="flex:1;min-width:160px;padding:8px;border-radius:8px;border:1px solid #e2e8f0;font-family:inherit">' +
+        '</div>' +
+      '</details>' +
     '</div>';
 
   const saveBtn = document.getElementById('aiSaveKey');
   if (saveBtn) {
     saveBtn.onclick = function () {
-      const provider = document.getElementById('aiProvider').value;
-      const apiKey = document.getElementById('aiApiKey').value.trim();
-      saveAiCfg({ provider: provider, apiKey: apiKey });
+      const workerUrl = (document.getElementById('aiWorkerUrl').value || '').trim();
+      const providerEl = document.getElementById('aiProvider');
+      const keyEl = document.getElementById('aiApiKey');
+      saveAiCfg({
+        workerUrl: workerUrl,
+        provider: providerEl ? providerEl.value : 'gemini',
+        apiKey: keyEl ? keyEl.value.trim() : (cfg.apiKey || '')
+      });
       saveBtn.textContent = 'ذخیره شد ✓';
       setTimeout(function () { saveBtn.textContent = 'ذخیره'; }, 1500);
     };
@@ -247,7 +280,7 @@ async function runOnPageAiAnalysis(all, allKeys) {
 
   const settingsWrap = document.getElementById('aiSettingsWrap');
   const cfg = loadAiCfg();
-  const needKey = !(cfg.apiKey && cfg.apiKey.trim());
+  const needKey = !((cfg.workerUrl || DEFAULT_WORKER_URL || '').trim() || (cfg.apiKey && cfg.apiKey.trim()));
   if (needKey) renderAiSettings(settingsWrap);
   else settingsWrap.innerHTML = '';
 
@@ -272,11 +305,11 @@ async function runOnPageAiAnalysis(all, allKeys) {
   if (pre) pre.textContent = localReport;
 
   if (needKey) {
-    statusEl.textContent = 'برای تحلیل با مدل AI، یک API Key رایگان ذخیره کن (پیشنهاد: Gemini).';
+    statusEl.textContent = 'آدرس Worker یا API Key را در تنظیمات ذخیره کن.';
     return;
   }
 
-  statusEl.textContent = 'در حال تحلیل با ' + (cfg.provider || 'gemini') + '...';
+  statusEl.textContent = 'در حال تحلیل...';
   try {
     const text = (await callFreeAi(prompt)).trim();
     if (!text) throw new Error('پاسخ خالی');
@@ -288,10 +321,10 @@ async function runOnPageAiAnalysis(all, allKeys) {
     console.warn(err);
     let msg = err.message || String(err);
     if (msg === 'NO_KEY') {
-      statusEl.textContent = 'API Key تنظیم نشده.';
+      statusEl.textContent = 'API Key / Worker تنظیم نشده.';
       renderAiSettings(settingsWrap);
     } else if (/Failed to fetch|NetworkError|CORS/i.test(msg)) {
-      statusEl.textContent = 'اتصال به API برقرار نشد (شبکه/فیلتر). از VPN یا Gemini امتحان کن. خلاصه محلی بالاست.';
+      statusEl.textContent = 'اتصال برقرار نشد (شبکه/فیلتر). خلاصه محلی بالاست.';
     } else {
       statusEl.textContent = 'خطا: ' + msg + ' — خلاصه محلی نمایش داده شد.';
     }

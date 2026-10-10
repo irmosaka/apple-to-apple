@@ -33,6 +33,131 @@ function formatPrice(price) {
   return new Intl.NumberFormat('fa-IR').format(price) + ' تومان';
 }
 
+// ===================== Digikala Integration (via digikala-mcp) =====================
+const DIGIKALA_MCP = 'https://digikala-mcp.mmdju.workers.dev/mcp';
+
+function extractDkpId(url) {
+  if (!url) return null;
+  const m = String(url).match(/dkp-(\d+)/i);
+  if (m) return parseInt(m[1], 10);
+  const n = String(url).trim().match(/^\d+$/);
+  if (n) return parseInt(n[0], 10);
+  return null;
+}
+
+async function mcpCall(toolName, args, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(DIGIKALA_MCP, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'accept': 'application/json, text/event-stream'
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: toolName, arguments: args }
+      })
+    });
+
+    const text = await res.text();
+    let payload = null;
+    for (const line of text.split('\n')) {
+      if (line.startsWith('data: ')) {
+        try { payload = JSON.parse(line.slice(6)); } catch (_) {}
+      }
+    }
+    if (!payload) {
+      try { payload = JSON.parse(text); } catch (_) {}
+    }
+
+    if (!payload) throw new Error('پاسخ نامعتبر از سرویس دیجی‌کالا');
+
+    if (payload.error) {
+      throw new Error(payload.error.message || 'خطای MCP');
+    }
+
+    const content = payload.result?.content?.[0]?.text;
+    if (payload.result?.isError) {
+      const msg = content || 'خطا در دریافت داده';
+      if (/rate-limit|15-30|temporarily/i.test(msg) && attempt < retries) {
+        await new Promise(r => setTimeout(r, 20000));
+        continue;
+      }
+      throw new Error(msg);
+    }
+
+    if (!content) throw new Error('داده خالی برگشت');
+    return JSON.parse(content);
+  }
+}
+
+function mapDigikalaToProduct(d, type = 'competitor') {
+  const features = {};
+
+  if (Array.isArray(d.specs)) {
+    d.specs.forEach(group => {
+      (group.attributes || []).forEach(attr => {
+        if (attr.title && attr.value) {
+          features[attr.title] = attr.value;
+        }
+      });
+    });
+  }
+
+  if (d.warranty) features['گارانتی'] = d.warranty;
+  if (d.rating_stars) {
+    features['امتیاز'] = d.rating_count
+      ? `${d.rating_stars} از ۵ (${d.rating_count} نظر)`
+      : String(d.rating_stars);
+  }
+  if (d.seller?.name) features['فروشنده'] = d.seller.name;
+
+  const aliases = [
+    ['رم', ['حافظه RAM', 'حافظه رم', 'RAM']],
+    ['حافظه داخلی', ['حافظه داخلی', 'ظرفیت حافظه داخلی']],
+    ['باتری', ['ظرفیت باتری', 'باتری']],
+    ['شارژ سریع', ['توان شارژ', 'شارژ سریع']],
+    ['صفحه نمایش', ['اندازه صفحه نمایش', 'صفحه نمایش', 'نوع صفحه نمایش']],
+    ['دوربین اصلی', ['رزولوشن دوربین اصلی', 'دوربین اصلی']],
+    ['پردازنده', ['تراشه', 'پردازنده', 'چیپست']]
+  ];
+  aliases.forEach(([canonical, keys]) => {
+    if (features[canonical]) return;
+    for (const k of keys) {
+      if (features[k]) {
+        features[canonical] = features[k];
+        break;
+      }
+    }
+  });
+
+  return {
+    id: 'dkp-' + d.id,
+    name: d.title || '',
+    brand: d.brand || '',
+    category: d.category || (d.category_path && d.category_path[d.category_path.length - 1]) || '',
+    price: d.price_toman || 0,
+    image: d.image || '',
+    type: type,
+    digikalaUrl: d.url || ('https://www.digikala.com/product/dkp-' + d.id + '/'),
+    competitors: [],
+    features
+  };
+}
+
+async function fetchDigikalaProduct(urlOrId) {
+  const id = typeof urlOrId === 'number' ? urlOrId : extractDkpId(urlOrId);
+  if (!id) throw new Error('آیدی محصول (dkp-...) در لینک پیدا نشد');
+  const details = await mcpCall('product_details', {
+    id,
+    include_specs: true,
+    include_comments: 0
+  });
+  return { raw: details, product: mapDigikalaToProduct(details) };
+}
+
 // ===================== Comparison Page =====================
 async function initComparisonPage() {
   const data = await loadData();
@@ -46,7 +171,6 @@ async function initComparisonPage() {
 
   if (!selectA) return;
 
-  // پر کردن دسته‌ها
   categories.forEach(cat => {
     categorySelect.innerHTML += `<option value="${cat}">${cat}</option>`;
   });
@@ -65,7 +189,6 @@ async function initComparisonPage() {
     if (!own) return [];
 
     const cat = categorySelect.value || own.category;
-    // اول رقباهای لینک‌شده، بعد بقیه هم‌دسته
     const linked = (own.competitors || [])
       .map(id => products.find(p => p.id === id))
       .filter(Boolean);
@@ -104,7 +227,6 @@ async function initComparisonPage() {
       return;
     }
 
-    // پیش‌فرض رقباهای لینک‌شده رو انتخاب کن
     const own = products.find(p => p.id === ownId);
     const defaultSelected = new Set(own.competitors || []);
 
@@ -118,7 +240,6 @@ async function initComparisonPage() {
       `;
     }).join('');
 
-    // کلیک روی چیپ
     competitorsBox.querySelectorAll('.competitor-chip').forEach(chip => {
       chip.addEventListener('click', (e) => {
         e.preventDefault();
@@ -154,11 +275,9 @@ async function initComparisonPage() {
     emptyEl.classList.add('hidden');
     resultEl.classList.remove('hidden');
 
-    // همه محصولات برای مقایسه
     const all = [own, ...comps];
     const colClass = `cols-${Math.min(all.length, 4)}`;
 
-    // کارت‌ها
     const cardsHtml = all.map((p, i) => `
       <div class="product-card">
         <div class="card-header">
@@ -173,15 +292,12 @@ async function initComparisonPage() {
       </div>
     `).join('');
 
-    // جدول ویژگی‌ها
     const allKeys = new Set();
     all.forEach(p => Object.keys(p.features || {}).forEach(k => allKeys.add(k)));
 
     let featuresHtml = '';
     allKeys.forEach(key => {
       const values = all.map(p => p.features?.[key] || '—');
-
-      // تشخیص برتری نسبت به محصول خودمان
       const ownVal = values[0];
       const numOwn = parseFloat(String(ownVal).replace(/[^\d.]/g, ''));
       const isWeight = key.includes('وزن') || key.toLowerCase().includes('weight');
@@ -190,9 +306,7 @@ async function initComparisonPage() {
         if (i === 0) return 'equal';
         const num = parseFloat(String(val).replace(/[^\d.]/g, ''));
         if (isNaN(numOwn) || isNaN(num) || numOwn === num) return 'equal';
-        if (isWeight) {
-          return num < numOwn ? 'better' : 'worse';
-        }
+        if (isWeight) return num < numOwn ? 'better' : 'worse';
         return num > numOwn ? 'better' : 'worse';
       });
 
@@ -213,7 +327,6 @@ async function initComparisonPage() {
       <div class="product-cards multi ${colClass}">
         ${cardsHtml}
       </div>
-
       <div class="features-table">
         <table>
           <thead>
@@ -230,14 +343,8 @@ async function initComparisonPage() {
     `;
   }
 
-  categorySelect.addEventListener('change', () => {
-    populateOwnProducts();
-  });
-
-  selectA.addEventListener('change', () => {
-    populateCompetitors();
-  });
-
+  categorySelect.addEventListener('change', () => populateOwnProducts());
+  selectA.addEventListener('change', () => populateCompetitors());
   populateOwnProducts();
 }
 
@@ -277,7 +384,6 @@ async function initAdminPage() {
       return;
     }
 
-    // گروه‌بندی بر اساس دسته
     const byCat = {};
     products.forEach(p => {
       const cat = p.category || 'بدون دسته';
@@ -296,7 +402,7 @@ async function initAdminPage() {
             <div class="info">
               <h3>${p.name}</h3>
               <div class="meta">
-                ${p.brand || 'بدون برند'} · ${formatPrice(p.price)} · 
+                ${p.brand || 'بدون برند'} · ${formatPrice(p.price)} ·
                 <strong>${p.type === 'own' ? 'محصول من' : 'رقیب'}</strong>
                 ${p.type === 'own' && compCount > 0 ? ` · ${compCount} رقیب` : ''}
                 · ${Object.keys(p.features || {}).length} ویژگی
@@ -326,7 +432,6 @@ async function initAdminPage() {
     const container = document.getElementById('competitorsSelectContainer');
     if (!container) return;
 
-    // فقط محصولات رقیب هم‌دسته (یا همه رقبا)
     const currentCat = form.category.value;
     const available = products.filter(p =>
       p.type === 'competitor' &&
@@ -369,7 +474,6 @@ async function initAdminPage() {
     addFeatureRow();
     fillCategorySelect();
     fillCompetitorsSelect(null, []);
-    // نمایش بخش رقبا فقط برای محصول خودمان
     document.getElementById('competitorsSection').style.display = 'block';
     modal.classList.add('open');
   };
@@ -395,7 +499,6 @@ async function initAdminPage() {
     Object.entries(feats).forEach(([k, v]) => addFeatureRow(k, v));
     if (Object.keys(feats).length === 0) addFeatureRow();
 
-    // رقبا
     document.getElementById('competitorsSection').style.display = p.type === 'own' ? 'block' : 'none';
     fillCompetitorsSelect(id, p.competitors || []);
 
@@ -405,7 +508,6 @@ async function initAdminPage() {
   window.deleteProduct = function (id) {
     if (!confirm('آیا مطمئنی می‌خوای این محصول رو حذف کنی؟')) return;
     products = products.filter(p => p.id !== id);
-    // پاک کردن از لیست رقباهای دیگران
     products.forEach(p => {
       if (p.competitors) p.competitors = p.competitors.filter(c => c !== id);
     });
@@ -430,7 +532,6 @@ async function initAdminPage() {
     container.appendChild(div);
   };
 
-  // تغییر نوع محصول → نمایش/مخفی کردن بخش رقبا
   form.type.addEventListener('change', () => {
     document.getElementById('competitorsSection').style.display =
       form.type.value === 'own' ? 'block' : 'none';
@@ -450,13 +551,11 @@ async function initAdminPage() {
       if (k) features[k] = v;
     });
 
-    // دسته جدید؟
     let cat = form.category.value.trim();
     if (cat && !categories.includes(cat)) {
       categories.push(cat);
     }
 
-    // رقباهای انتخاب‌شده
     const selectedComps = Array.from(document.querySelectorAll('input[name="compIds"]:checked'))
       .map(cb => cb.value);
 
@@ -487,7 +586,6 @@ async function initAdminPage() {
     closeModal();
   });
 
-  // Export / Import
   window.exportJSON = function () {
     const exportData = { categories, products };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -527,17 +625,66 @@ async function initAdminPage() {
 
   window.tryFetchDigikala = async function () {
     const url = form.digikalaUrl.value.trim();
-    if (!url || !url.includes('digikala.com')) {
-      showToast('لینک معتبر دیجی‌کالا وارد کن', 'error');
+    if (!url) {
+      showToast('لینک یا آیدی دیجی‌کالا را وارد کن', 'error');
       return;
     }
-    showToast('در حال تلاش برای دریافت اطلاعات... (به خاطر CORS ممکنه موفق نشه)');
-    setTimeout(() => {
-      showToast('به خاطر محدودیت مرورگر (CORS) اسکرپ مستقیم ممکن نیست. مشخصات رو دستی وارد کن.', 'error');
-    }, 1500);
+    if (!extractDkpId(url) && !url.includes('digikala.com')) {
+      showToast('لینک معتبر دیجی‌کالا یا آیدی dkp وارد کن', 'error');
+      return;
+    }
+
+    const btn = document.querySelector('button[onclick="tryFetchDigikala()"]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'در حال دریافت...';
+    }
+    showToast('در حال دریافت مشخصات از دیجی‌کالا...');
+
+    try {
+      const { product } = await fetchDigikalaProduct(url);
+
+      form.name.value = product.name || '';
+      form.brand.value = product.brand || '';
+      form.price.value = product.price || '';
+      form.image.value = product.image || '';
+      form.digikalaUrl.value = product.digikalaUrl || url;
+
+      if (product.category) {
+        if (!categories.includes(product.category)) {
+          categories.push(product.category);
+        }
+        fillCategorySelect(product.category);
+      }
+
+      const container = document.getElementById('featuresContainer');
+      container.innerHTML = '';
+      const feats = product.features || {};
+      const entries = Object.entries(feats);
+      if (entries.length === 0) {
+        addFeatureRow();
+      } else {
+        const priority = ['صفحه نمایش', 'رزولوشن', 'پردازنده', 'رم', 'حافظه داخلی', 'دوربین اصلی', 'باتری', 'شارژ سریع', 'سیستم عامل', 'وزن', 'گارانتی', 'امتیاز'];
+        const ordered = [];
+        priority.forEach(k => { if (feats[k]) ordered.push([k, feats[k]]); });
+        entries.forEach(([k, v]) => {
+          if (!priority.includes(k)) ordered.push([k, v]);
+        });
+        ordered.slice(0, 25).forEach(([k, v]) => addFeatureRow(k, v));
+      }
+
+      showToast(`✅ مشخصات دریافت شد (${Object.keys(feats).length} ویژگی)`);
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || 'خطا در دریافت از دیجی‌کالا', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'دریافت از دیجی‌کالا';
+      }
+    }
   };
 
-  // افزودن دسته جدید
   window.addNewCategory = function () {
     const name = prompt('نام دسته جدید را وارد کنید:');
     if (name && name.trim() && !categories.includes(name.trim())) {

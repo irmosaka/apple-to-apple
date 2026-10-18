@@ -25,7 +25,7 @@
     <div id="loginError" class="login-error" style="display:none"></div>
     <input type="password" id="adminPassword" placeholder="رمز عبور" autocomplete="current-password">
     <button class="btn btn-primary" style="width:100%" onclick="tryAdminLogin()">ورود</button>
-    <p style="margin-top:14px;font-size:0.8rem;color:var(--text-muted)">اولین بار؟ رمزی که می‌زنید به‌عنوان رمز پنل ذخیره می‌شود.</p>
+    <p style="margin-top:14px;font-size:0.8rem;color:var(--text-muted)">رمز پیش‌فرض را از تنظیمات پروژه بگیر؛ در صورت فراموشی Local Storage را ریست کن.</p>
   </div>
 
   <main class="container" id="adminMain" style="display:none">
@@ -45,6 +45,16 @@
         <button class="btn btn-primary" id="btnRefreshAllPrices" onclick="refreshAllPrices()">🔄 به‌روزرسانی همه قیمت‌ها</button>
       </div>
     </div>
+
+    <section class="category-manager" id="categoryManager">
+      <div class="cat-manager-header">
+        <h3>مدیریت دسته‌بندی‌ها</h3>
+        <button type="button" class="btn btn-outline btn-sm" onclick="addNewCategory()">+ دسته جدید</button>
+      </div>
+      <p class="cat-manager-hint">دسته‌های پیش‌فرض را می‌توانی تغییر نام بدهی یا حذف کنی. با تغییر نام، محصولات همان دسته هم به‌روز می‌شوند.</p>
+      <div id="categoryList" class="category-list"></div>
+    </section>
+
     <div id="productList" class="product-list"></div>
   </main>
 

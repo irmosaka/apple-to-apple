@@ -207,7 +207,7 @@ async function initAdminPage() {
     products.forEach(function (p) {
       if (p.competitors) p.competitors = p.competitors.filter(function (c) { return c !== id; });
     });
-    persist(); renderList(); showToast('حذف شد');
+    persist(); renderList(); renderCategories(); showToast('حذف شد');
   };
 
   window.closeModal = function () { modal.classList.remove('open'); };
@@ -264,7 +264,7 @@ async function initAdminPage() {
       showToast('اضافه شد');
     }
     pendingLastUpdate = null;
-    persist(); renderList(); closeModal();
+    persist(); renderList(); renderCategories(); closeModal();
   });
 
   window.exportJSON = function () {
@@ -287,7 +287,7 @@ async function initAdminPage() {
           const parsed = JSON.parse(ev.target.result);
           categories = parsed.categories || [];
           products = parsed.products || parsed;
-          persist(); renderList(); showToast('وارد شد');
+          persist(); renderList(); renderCategories(); showToast('وارد شد');
         } catch (err) { showToast('فایل نامعتبر', 'error'); }
       };
       reader.readAsText(file);
@@ -338,17 +338,88 @@ async function initAdminPage() {
     }
   };
 
+  function renderCategories() {
+    const box = document.getElementById('categoryList');
+    if (!box) return;
+    if (!categories.length) {
+      box.innerHTML = '<p class="hint" style="color:var(--text-muted)">هنوز دسته‌ای نیست. با «+ دسته جدید» بساز.</p>';
+      return;
+    }
+    box.innerHTML = categories.map(function (c, i) {
+      const count = products.filter(function (p) { return p.category === c; }).length;
+      return '<div class="category-row" data-cat="' + c.replace(/"/g, '"') + '">' +
+        '<div class="category-row-info">' +
+          '<span class="category-row-name">' + c + '</span>' +
+          '<span class="category-row-count">' + count + ' محصول</span>' +
+        '</div>' +
+        '<div class="category-row-actions">' +
+          '<button type="button" class="btn btn-outline btn-sm" data-action="rename" data-idx="' + i + '">تغییر نام</button>' +
+          '<button type="button" class="btn btn-danger btn-sm" data-action="delete" data-idx="' + i + '">حذف</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    box.querySelectorAll('button[data-action]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const idx = parseInt(btn.getAttribute('data-idx'), 10);
+        const action = btn.getAttribute('data-action');
+        const oldName = categories[idx];
+        if (!oldName) return;
+        if (action === 'rename') {
+          const next = prompt('نام جدید دسته «' + oldName + '»:', oldName);
+          if (!next || !next.trim()) return;
+          const name = next.trim();
+          if (name === oldName) return;
+          if (categories.indexOf(name) >= 0) {
+            showToast('این نام از قبل وجود دارد', 'error');
+            return;
+          }
+          categories[idx] = name;
+          products.forEach(function (p) {
+            if (p.category === oldName) p.category = name;
+          });
+          persist();
+          fillCategorySelect(name);
+          renderList();
+          renderCategories();
+          showToast('نام دسته تغییر کرد');
+        } else if (action === 'delete') {
+          const count = products.filter(function (p) { return p.category === oldName; }).length;
+          const msg = count
+            ? 'دسته «' + oldName + '» و اتصال ' + count + ' محصول حذف شود؟ (خود محصولات پاک نمی‌شوند، فقط دسته‌شان خالی می‌شود)'
+            : 'دسته «' + oldName + '» حذف شود؟';
+          if (!confirm(msg)) return;
+          categories.splice(idx, 1);
+          products.forEach(function (p) {
+            if (p.category === oldName) p.category = '';
+          });
+          persist();
+          fillCategorySelect('');
+          renderList();
+          renderCategories();
+          showToast('دسته حذف شد');
+        }
+      });
+    });
+  }
+
   window.addNewCategory = function () {
     const name = prompt('نام دسته جدید:');
-    if (name && name.trim() && categories.indexOf(name.trim()) < 0) {
-      categories.push(name.trim());
-      fillCategorySelect(name.trim());
-      persist();
-      showToast('دسته اضافه شد');
+    if (!name || !name.trim()) return;
+    const n = name.trim();
+    if (categories.indexOf(n) >= 0) {
+      showToast('این دسته از قبل هست', 'error');
+      return;
     }
+    categories.push(n);
+    fillCategorySelect(n);
+    persist();
+    renderCategories();
+    showToast('دسته اضافه شد');
   };
 
   renderList();
+  renderCategories();
 }
 
 function bootApp() {

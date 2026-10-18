@@ -1,6 +1,7 @@
 // Client-side admin gate (not server-grade security)
-const ADMIN_HASH_KEY = 'appleToApple_adminHash';
+const ADMIN_HASH_KEY = 'appleToApple_adminHash_v2';
 const ADMIN_SESSION_KEY = 'appleToApple_adminSession';
+const DEFAULT_ADMIN_PASSWORD = '1751366';
 
 async function sha256(text) {
   const data = new TextEncoder().encode(text);
@@ -26,6 +27,13 @@ function showLoginGate() {
   if (main) main.style.display = 'none';
 }
 
+async function ensureDefaultPassword() {
+  if (!localStorage.getItem(ADMIN_HASH_KEY)) {
+    const hash = await sha256(DEFAULT_ADMIN_PASSWORD);
+    localStorage.setItem(ADMIN_HASH_KEY, hash);
+  }
+}
+
 window.tryAdminLogin = async function () {
   const input = document.getElementById('adminPassword');
   const err = document.getElementById('loginError');
@@ -34,15 +42,9 @@ window.tryAdminLogin = async function () {
     if (err) { err.style.display = 'block'; err.textContent = 'رمز را وارد کنید'; }
     return;
   }
+  await ensureDefaultPassword();
   const hash = await sha256(pwd);
   const stored = localStorage.getItem(ADMIN_HASH_KEY);
-  if (!stored) {
-    localStorage.setItem(ADMIN_HASH_KEY, hash);
-    sessionStorage.setItem(ADMIN_SESSION_KEY, '1');
-    showAdminApp();
-    if (typeof bootApp === 'function') bootApp();
-    return;
-  }
   if (hash === stored) {
     sessionStorage.setItem(ADMIN_SESSION_KEY, '1');
     showAdminApp();
@@ -69,11 +71,13 @@ window.changeAdminPassword = async function () {
 
 document.addEventListener('DOMContentLoaded', function () {
   if (!document.getElementById('loginGate')) return;
-  if (isAdminLoggedIn()) {
-    showAdminApp();
-  } else {
-    showLoginGate();
-  }
+  ensureDefaultPassword().then(function () {
+    if (isAdminLoggedIn()) {
+      showAdminApp();
+    } else {
+      showLoginGate();
+    }
+  });
   const input = document.getElementById('adminPassword');
   if (input) {
     input.addEventListener('keydown', function (e) {

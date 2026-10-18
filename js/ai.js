@@ -1,8 +1,5 @@
-/** On-page AI — Worker proxy (secure) or direct free API keys */
-const AI_CFG_KEY = 'appleToApple_aiCfg';
-
-/** After deploy, put your worker URL here (public is OK — key is NOT here) */
-const DEFAULT_WORKER_URL = '';
+/** Local brand supervisor — focuses on اسنوا / دوو vs competitors. No online API. */
+const OUR_BRANDS = ['اسنوا', 'اسنو', 'snowa', 'snow', 'دوو', 'daewoo', 'dae woo'];
 
 function formatPriceAi(price) {
   if (typeof formatPrice === 'function') return formatPrice(price);
@@ -10,24 +7,26 @@ function formatPriceAi(price) {
   return new Intl.NumberFormat('fa-IR').format(price) + ' تومان';
 }
 
-function loadAiCfg() {
-  try {
-    return JSON.parse(localStorage.getItem(AI_CFG_KEY) || '{}') || {};
-  } catch (e) {
-    return {};
-  }
+function isOurBrand(p) {
+  const b = String(p.brand || '').toLowerCase().trim();
+  const n = String(p.name || '').toLowerCase();
+  if (!b && !n) return false;
+  return OUR_BRANDS.some(function (x) {
+    const k = x.toLowerCase();
+    return b.indexOf(k) >= 0 || n.indexOf(k) >= 0;
+  });
 }
 
-function saveAiCfg(cfg) {
-  localStorage.setItem(AI_CFG_KEY, JSON.stringify(cfg));
+function numFrom(val) {
+  if (val == null || val === '—') return NaN;
+  const n = parseFloat(String(val).replace(/[^\d.]/g, ''));
+  return isNaN(n) ? NaN : n;
 }
 
-function buildLocalReport(all, allKeys) {
-  function numFrom(val) {
-    if (val == null || val === '—') return NaN;
-    const n = parseFloat(String(val).replace(/[^\d.]/g, ''));
-    return isNaN(n) ? NaN : n;
-  }
+function buildSupervisorReport(all, allKeys) {
+  const ours = all.filter(isOurBrand);
+  const rivals = all.filter(function (p) { return !isOurBrand(p); });
+
   const diffs = [];
   allKeys.forEach(function (key) {
     const vals = all.map(function (p) { return (p.features && p.features[key]) || '—'; });
@@ -35,300 +34,158 @@ function buildLocalReport(all, allKeys) {
     vals.forEach(function (v) { uniq[v] = true; });
     if (Object.keys(uniq).length > 1) diffs.push({ key: key, vals: vals });
   });
-  const byPrice = all.slice().filter(function (p) { return p.price > 0; })
-    .sort(function (a, b) { return a.price - b.price; });
-  const cheapest = byPrice[0];
-  const expensive = byPrice[byPrice.length - 1];
-  const winCounts = all.map(function () { return 0; });
+
   const weightKeys = /وزن|weight/i;
+  const score = all.map(function () { return 0; });
   diffs.forEach(function (d) {
     const nums = d.vals.map(numFrom);
-    if (nums.every(function (n) { return !isNaN(n); })) {
-      const isW = weightKeys.test(d.key);
-      let best = 0;
-      for (let i = 1; i < nums.length; i++) {
-        if (isW ? nums[i] < nums[best] : nums[i] > nums[best]) best = i;
-      }
-      const sorted = nums.slice().sort(function (a, b) { return isW ? a - b : b - a; });
-      if (sorted[0] !== sorted[1]) winCounts[best]++;
+    if (!nums.every(function (n) { return !isNaN(n); })) return;
+    const isW = weightKeys.test(d.key);
+    let best = 0;
+    for (let i = 1; i < nums.length; i++) {
+      if (isW ? nums[i] < nums[best] : nums[i] > nums[best]) best = i;
     }
+    const sorted = nums.slice().sort(function (a, b) { return isW ? a - b : b - a; });
+    if (sorted[0] !== sorted[1]) score[best]++;
   });
-  let bestIdx = 0;
-  for (let i = 1; i < winCounts.length; i++) {
-    if (winCounts[i] > winCounts[bestIdx]) bestIdx = i;
-  }
-  let valueBest = all[0];
-  let valueScore = -1;
-  all.forEach(function (p) {
-    const fc = Object.keys(p.features || {}).length;
-    const pr = p.price || 1e15;
-    const sc = fc * 1e6 / Math.max(pr, 1);
-    if (sc > valueScore) { valueScore = sc; valueBest = p; }
-  });
+
+  const byPrice = all.filter(function (p) { return p.price > 0; })
+    .slice().sort(function (a, b) { return a.price - b.price; });
 
   let lines = [];
-  lines.push('مقایسه ' + all.length + ' محصول:');
+  lines.push('🧭 گزارش ناظر برند (اسنوا / دوو)');
+  lines.push('────────────────────────');
+  lines.push('');
+
+  lines.push('۱) ترکیب مقایسه');
+  if (ours.length) {
+    lines.push('  محصولات برند خودمان:');
+    ours.forEach(function (p) {
+      lines.push('    • ' + p.name + (p.brand ? ' (' + p.brand + ')' : '') + ' — ' + formatPriceAi(p.price));
+    });
+  } else {
+    lines.push('  ⚠ در این مقایسه محصولی با برند اسنوا یا دوو پیدا نشد.');
+    lines.push('  پیشنهاد: محصول اصلی را از برند اسنوا/دوو انتخاب کن تا تحلیل ناظر معنا پیدا کند.');
+  }
+  if (rivals.length) {
+    lines.push('  رقبا:');
+    rivals.forEach(function (p) {
+      lines.push('    • ' + p.name + (p.brand ? ' (' + p.brand + ')' : '') + ' — ' + formatPriceAi(p.price));
+    });
+  } else {
+    lines.push('  رقیبی در مقایسه نیست.');
+  }
+
+  lines.push('');
+  lines.push('۲) موقعیت قیمتی');
+  if (byPrice.length >= 2) {
+    lines.push('  ارزان‌ترین: «' + byPrice[0].name + '» (' + formatPriceAi(byPrice[0].price) + ')');
+    lines.push('  گران‌ترین: «' + byPrice[byPrice.length - 1].name + '» (' + formatPriceAi(byPrice[byPrice.length - 1].price) + ')');
+    ours.forEach(function (p) {
+      if (!p.price) return;
+      const cheaperRivals = rivals.filter(function (r) { return r.price > 0 && r.price < p.price; });
+      const pricierRivals = rivals.filter(function (r) { return r.price > 0 && r.price > p.price; });
+      if (cheaperRivals.length) {
+        lines.push('  «' + p.name + '» از ' + cheaperRivals.length + ' رقیب گران‌تر است → روی ارزش‌افزوده (گارانتی، خدمات، کیفیت ساخت) تاکید کن.');
+      }
+      if (pricierRivals.length && !cheaperRivals.length) {
+        lines.push('  «' + p.name + '» نسبت به رقبا قیمت رقابتی/بهتری دارد → فرصت فروش روی قیمت.');
+      }
+    });
+  } else {
+    lines.push('  داده قیمت کافی برای جمع‌بندی نیست.');
+  }
+
+  lines.push('');
+  lines.push('۳) برتری مشخصات (عددی)');
   all.forEach(function (p, i) {
-    lines.push((i + 1) + ') ' + p.name + (p.brand ? ' (' + p.brand + ')' : '') +
-      ' — قیمت: ' + formatPriceAi(p.price));
+    const tag = isOurBrand(p) ? '[برند ما]' : '[رقیب]';
+    lines.push('  ' + tag + ' «' + p.name + '»: ' + score[i] + ' برتری عددی');
   });
-  if (cheapest && expensive && cheapest.id !== expensive.id) {
-    lines.push('ارزان‌ترین: ' + cheapest.name + ' (' + formatPriceAi(cheapest.price) + ')');
-    lines.push('گران‌ترین: ' + expensive.name + ' (' + formatPriceAi(expensive.price) + ')');
+
+  lines.push('');
+  lines.push('۴) شکاف‌های مهم نسبت به رقبا');
+  let gapCount = 0;
+  if (ours.length && rivals.length) {
+    diffs.forEach(function (d) {
+      const nums = d.vals.map(numFrom);
+      if (!nums.every(function (n) { return !isNaN(n); })) return;
+      const isW = weightKeys.test(d.key);
+      ours.forEach(function (op) {
+        const oi = all.indexOf(op);
+        rivals.forEach(function (rp) {
+          const ri = all.indexOf(rp);
+          if (isNaN(nums[oi]) || isNaN(nums[ri])) return;
+          const weLose = isW ? nums[oi] > nums[ri] : nums[oi] < nums[ri];
+          if (weLose) {
+            gapCount++;
+            if (gapCount <= 8) {
+              lines.push('  • ' + d.key + ': ما=' + d.vals[oi] + ' | رقیب (' + (rp.brand || rp.name.substring(0, 18)) + ')=' + d.vals[ri]);
+            }
+          }
+        });
+      });
+    });
   }
-  lines.push('تفاوت مشخصات:');
-  diffs.slice(0, 15).forEach(function (d) {
-    lines.push('- ' + d.key + ': ' + d.vals.join(' | '));
-  });
-  lines.push('برتری عددی: ' + all.map(function (p, i) {
-    return p.name.substring(0, 25) + '=' + winCounts[i];
-  }).join('، '));
-  lines.push('پیشنهاد ارزش: ' + valueBest.name);
-  lines.push('پیشنهاد برتری مشخصات: ' + all[bestIdx].name);
+  if (gapCount === 0) {
+    lines.push('  شکاف عددی واضحی ثبت نشد (یا داده عددی مشترک کم است).');
+  } else if (gapCount > 8) {
+    lines.push('  … و ' + (gapCount - 8) + ' مورد دیگر');
+  }
+
+  lines.push('');
+  lines.push('۵) توصیه ناظر');
+  if (!ours.length) {
+    lines.push('  اول یک محصول اسنوا یا دوو را به‌عنوان محور مقایسه بگذار.');
+  } else if (!rivals.length) {
+    lines.push('  حداقل یک رقیب اضافه کن تا گزارش رقابتی کامل شود.');
+  } else {
+    let bestOurs = ours[0];
+    let bestS = -1;
+    ours.forEach(function (p) {
+      const i = all.indexOf(p);
+      const s = score[i] * 1000000 + (1e12 / Math.max(p.price || 1e12, 1));
+      if (s > bestS) { bestS = s; bestOurs = p; }
+    });
+    lines.push('  محور پیشنهادی فروش: «' + bestOurs.name + '»');
+    lines.push('  در ارائه به مشتری: تفاوت قیمت را شفاف بگو، روی خدمات پس از فروش و گارانتی برند خودت تاکید کن،');
+    lines.push('  و فقط روی مشخصاتی مانور بده که واقعاً برتری عددی یا کیفی داری.');
+  }
+
+  lines.push('');
+  lines.push('— تحلیل محلی ناظر برند · بدون اتصال آنلاین');
   return lines.join('\n');
-}
-
-async function callGemini(apiKey, prompt) {
-  const models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest'];
-  let lastErr = null;
-  for (let i = 0; i < models.length; i++) {
-    const model = models[i];
-    try {
-      const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
-        model + ':generateContent?key=' + encodeURIComponent(apiKey);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 1024 }
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = (data.error && data.error.message) || ('Gemini HTTP ' + res.status);
-        lastErr = new Error(msg);
-        continue;
-      }
-      const parts = data.candidates && data.candidates[0] && data.candidates[0].content &&
-        data.candidates[0].content.parts;
-      if (!parts || !parts.length) {
-        lastErr = new Error('پاسخ خالی از Gemini');
-        continue;
-      }
-      return parts.map(function (p) { return p.text || ''; }).join('');
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error('هیچ مدل Gemini در دسترس نبود');
-}
-
-async function callGroq(apiKey, prompt) {
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: 'تو مشاور خرید فارسی‌زبان هستی. پاسخ را فقط فارسی و کوتاه بنویس.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.4,
-      max_tokens: 1024
-    })
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    const msg = (data.error && data.error.message) || ('Groq HTTP ' + res.status);
-    throw new Error(msg);
-  }
-  return (data.choices && data.choices[0] && data.choices[0].message &&
-    data.choices[0].message.content) || '';
-}
-
-async function callDeepSeek(apiKey, prompt) {
-  const res = await fetch('https://api.deepseek.com/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey
-    },
-    body: JSON.stringify({
-      model: 'deepseek-chat',
-      messages: [
-        { role: 'system', content: 'تو مشاور خرید فارسی‌زبان هستی. پاسخ را فقط فارسی و کوتاه بنویس.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.4,
-      max_tokens: 1024
-    })
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    const msg = (data.error && data.error.message) || ('DeepSeek HTTP ' + res.status);
-    throw new Error(msg);
-  }
-  return (data.choices && data.choices[0] && data.choices[0].message &&
-    data.choices[0].message.content) || '';
-}
-
-async function callWorker(workerUrl, prompt) {
-  const res = await fetch(workerUrl.replace(/\/$/, ''), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt: prompt })
-  });
-  const data = await res.json().catch(function () { return {}; });
-  if (!res.ok) {
-    throw new Error((data && data.error) || ('Worker HTTP ' + res.status));
-  }
-  if (!data.text) throw new Error('پاسخ خالی از Worker');
-  return data.text;
-}
-
-async function callFreeAi(prompt) {
-  const cfg = loadAiCfg();
-  const workerUrl = (cfg.workerUrl || DEFAULT_WORKER_URL || '').trim();
-
-  if (workerUrl) {
-    return callWorker(workerUrl, prompt);
-  }
-
-  const provider = cfg.provider || 'gemini';
-  const key = (cfg.apiKey || '').trim();
-  if (!key) throw new Error('NO_KEY');
-
-  if (provider === 'groq') return callGroq(key, prompt);
-  if (provider === 'deepseek') return callDeepSeek(key, prompt);
-  return callGemini(key, prompt);
-}
-
-function renderAiSettings(container) {
-  const cfg = loadAiCfg();
-  const wurl = cfg.workerUrl || DEFAULT_WORKER_URL || '';
-  container.innerHTML =
-    '<div class="ai-settings" style="margin-bottom:12px;padding:12px;border:1px solid var(--border,#e2e8f0);border-radius:10px;background:#f8fafc">' +
-      '<div style="font-weight:600;margin-bottom:8px">اتصال امن (Cloudflare Worker)</div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
-        '<input id="aiWorkerUrl" type="url" placeholder="https://apple-to-apple-ai.xxx.workers.dev" value="' +
-          String(wurl).replace(/"/g, '"') + '" ' +
-          'style="flex:1;min-width:220px;padding:8px;border-radius:8px;border:1px solid #e2e8f0;font-family:inherit">' +
-        '<button type="button" class="btn btn-primary btn-sm" id="aiSaveKey">ذخیره</button>' +
-      '</div>' +
-      '<div style="font-size:0.8rem;color:var(--text-muted);line-height:1.6;margin-bottom:10px">' +
-        'کلید Gemini روی Worker به‌صورت Secret می‌ماند (نه در گیت‌هاب، نه در مرورگر). ' +
-        'راهنما: پوشه <code>worker/</code> در ریپو.' +
-      '</div>' +
-      '<details><summary style="cursor:pointer;font-size:0.85rem">روش مستقیم (فقط خودت — کلید در مرورگر)</summary>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">' +
-          '<select id="aiProvider" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0;font-family:inherit">' +
-            '<option value="gemini"' + ((cfg.provider || 'gemini') === 'gemini' ? ' selected' : '') + '>Gemini</option>' +
-            '<option value="groq"' + (cfg.provider === 'groq' ? ' selected' : '') + '>Groq</option>' +
-            '<option value="deepseek"' + (cfg.provider === 'deepseek' ? ' selected' : '') + '>DeepSeek</option>' +
-          '</select>' +
-          '<input id="aiApiKey" type="password" placeholder="API Key (اختیاری)" value="' +
-            (cfg.apiKey || '').replace(/"/g, '"') + '" style="flex:1;min-width:160px;padding:8px;border-radius:8px;border:1px solid #e2e8f0;font-family:inherit">' +
-        '</div>' +
-      '</details>' +
-    '</div>';
-
-  const saveBtn = document.getElementById('aiSaveKey');
-  if (saveBtn) {
-    saveBtn.onclick = function () {
-      const workerUrl = (document.getElementById('aiWorkerUrl').value || '').trim();
-      const providerEl = document.getElementById('aiProvider');
-      const keyEl = document.getElementById('aiApiKey');
-      saveAiCfg({
-        workerUrl: workerUrl,
-        provider: providerEl ? providerEl.value : 'gemini',
-        apiKey: keyEl ? keyEl.value.trim() : (cfg.apiKey || '')
-      });
-      saveBtn.textContent = 'ذخیره شد ✓';
-      setTimeout(function () { saveBtn.textContent = 'ذخیره'; }, 1500);
-    };
-  }
 }
 
 async function runOnPageAiAnalysis(all, allKeys) {
   const box = document.getElementById('aiAnalysisBox');
   if (!box) return;
 
-  const localReport = buildLocalReport(all, allKeys);
-  const prompt =
-    'تو مشاور خرید فارسی‌زبان هستی. بر اساس داده‌های زیر، یک تحلیل کوتاه و کاربردی بنویس.\n' +
-    'ساختار پاسخ:\n' +
-    '1) خلاصه مقایسه در ۲–۳ جمله\n' +
-    '2) نقاط قوت و ضعف هر محصول (کوتاه)\n' +
-    '3) برای چه کسی کدام بهتر است\n' +
-    '4) یک توصیه نهایی واضح\n' +
-    'فقط فارسی بنویس. اغراق نکن.\n\n' +
-    'داده‌ها:\n' + localReport;
+  const report = buildSupervisorReport(all, allKeys);
 
   box.classList.remove('hidden');
   box.innerHTML =
-    '<div class="ai-box-header"><strong>✨ تحلیل هوشمند</strong>' +
-      '<button type="button" class="btn btn-outline btn-sm" id="aiToggleSettings">تنظیم API</button>' +
+    '<div class="ai-box-header">' +
+      '<div><strong>🧭 ناظر برند (اسنوا / دوو)</strong> ' +
+      '<span class="ai-badge">فقط محلی</span></div>' +
+      '<button type="button" class="btn btn-outline btn-sm" id="btnCopyAi">کپی متن</button>' +
     '</div>' +
-    '<div id="aiSettingsWrap"></div>' +
-    '<div id="aiLiveStatus" style="color:var(--text-muted);margin-bottom:10px"></div>' +
-    '<div id="aiLiveResult" class="ai-text" style="min-height:80px;white-space:pre-wrap"></div>' +
-    '<div id="aiLocalFallback" style="margin-top:12px"></div>';
+    '<pre class="ai-text" id="aiReportText"></pre>' +
+    '<p class="ai-hint">این گزارش بدون اینترنت و فقط از روی مشخصات ذخیره‌شده ساخته می‌شود. تمرکز روی جایگاه برندهای اسنوا و دوو در برابر رقباست.</p>';
 
-  const settingsWrap = document.getElementById('aiSettingsWrap');
-  const cfg = loadAiCfg();
-  const needKey = !((cfg.workerUrl || DEFAULT_WORKER_URL || '').trim() || (cfg.apiKey && cfg.apiKey.trim()));
-  if (needKey) renderAiSettings(settingsWrap);
-  else settingsWrap.innerHTML = '';
+  const pre = document.getElementById('aiReportText');
+  if (pre) pre.textContent = report;
 
-  const toggle = document.getElementById('aiToggleSettings');
-  if (toggle) {
-    toggle.onclick = function () {
-      if (settingsWrap.innerHTML) settingsWrap.innerHTML = '';
-      else renderAiSettings(settingsWrap);
+  const copyBtn = document.getElementById('btnCopyAi');
+  if (copyBtn) {
+    copyBtn.onclick = function () {
+      navigator.clipboard.writeText(report).then(function () {
+        copyBtn.textContent = 'کپی شد ✓';
+        setTimeout(function () { copyBtn.textContent = 'کپی متن'; }, 2000);
+      });
     };
   }
-
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  const statusEl = document.getElementById('aiLiveStatus');
-  const resultEl = document.getElementById('aiLiveResult');
-  const fallbackEl = document.getElementById('aiLocalFallback');
-
-  fallbackEl.innerHTML =
-    '<details open><summary style="cursor:pointer;color:var(--text-muted);font-size:0.85rem">خلاصه محلی (بدون API)</summary>' +
-    '<pre class="ai-text" style="margin-top:8px"></pre></details>';
-  const pre = fallbackEl.querySelector('pre');
-  if (pre) pre.textContent = localReport;
-
-  if (needKey) {
-    statusEl.textContent = 'آدرس Worker یا API Key را در تنظیمات ذخیره کن.';
-    return;
-  }
-
-  statusEl.textContent = 'در حال تحلیل...';
-  try {
-    const text = (await callFreeAi(prompt)).trim();
-    if (!text) throw new Error('پاسخ خالی');
-    statusEl.textContent = 'تحلیل AI آماده است';
-    resultEl.textContent = text;
-    const det = fallbackEl.querySelector('details');
-    if (det) det.open = false;
-  } catch (err) {
-    console.warn(err);
-    let msg = err.message || String(err);
-    if (msg === 'NO_KEY') {
-      statusEl.textContent = 'API Key / Worker تنظیم نشده.';
-      renderAiSettings(settingsWrap);
-    } else if (/Failed to fetch|NetworkError|CORS/i.test(msg)) {
-      statusEl.textContent = 'اتصال برقرار نشد (شبکه/فیلتر). خلاصه محلی بالاست.';
-    } else {
-      statusEl.textContent = 'خطا: ' + msg + ' — خلاصه محلی نمایش داده شد.';
-    }
-  }
 }
 
 window.showAiAnalysis = function (all, allKeys) {

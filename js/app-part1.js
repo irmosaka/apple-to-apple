@@ -125,6 +125,16 @@ async function initComparisonPage() {
     );
   }
 
+  function isOurBrandLocal(p) {
+    const brands = ['اسنوا', 'اسنو', 'snowa', 'snow', 'دوو', 'daewoo'];
+    const b = String(p.brand || '').toLowerCase();
+    const n = String(p.name || '').toLowerCase();
+    return brands.some(function (x) {
+      const k = x.toLowerCase();
+      return b.indexOf(k) >= 0 || n.indexOf(k) >= 0;
+    });
+  }
+
   function renderComparison() {
     const mainId = selectA.value;
     const compIds = getSelectedCompetitors();
@@ -152,15 +162,22 @@ async function initComparisonPage() {
     });
 
     let headCells = '<th class="feat-col">ویژگی</th>';
-    all.forEach(function (p) {
+    all.forEach(function (p, idx) {
       const last = formatLastUpdate(p.lastPriceUpdate);
       const hasDk = !!(p.digikalaUrl && typeof extractDkpId === 'function' && extractDkpId(p.digikalaUrl));
+      const ours = isOurBrandLocal(p);
+      const removeAttr = idx === 0
+        ? 'data-remove="main"'
+        : 'data-remove="comp" data-id="' + p.id + '"';
       headCells +=
         '<th class="product-col">' +
           '<div class="cmp-head">' +
-            '<img class="cmp-img" src="' + (p.image || 'https://via.placeholder.com/120?text=No+Image') + '" alt="" onerror="this.src=\'https://via.placeholder.com/120?text=No+Image\'">' +
+            '<button type="button" class="cmp-remove" ' + removeAttr + ' title="حذف از مقایسه">×</button>' +
+            '<div class="cmp-img-wrap">' +
+              '<img class="cmp-img" src="' + (p.image || 'https://via.placeholder.com/120?text=No+Image') + '" alt="" onerror="this.src=\'https://via.placeholder.com/120?text=No+Image\'">' +
+            '</div>' +
             '<div class="cmp-name">' + p.name + '</div>' +
-            (p.brand ? '<div class="cmp-brand">' + p.brand + '</div>' : '') +
+            (p.brand ? '<div class="cmp-brand' + (ours ? ' ours' : '') + '">' + p.brand + (ours ? ' · برند ما' : '') + '</div>' : '') +
             '<div class="cmp-price">' + formatPrice(p.price) + '</div>' +
             (last ? '<div class="cmp-updated">به‌روز: ' + last + '</div>' : '') +
             (hasDk
@@ -193,11 +210,16 @@ async function initComparisonPage() {
 
     resultEl.innerHTML =
       '<div class="compare-toolbar">' +
-        '<button type="button" class="btn btn-outline btn-sm" id="btnExportPdf">📄 خروجی PDF</button>' +
-        '<button type="button" class="btn btn-primary btn-sm" id="btnAiAnalysis">✨ تحلیل هوشمند</button>' +
+        '<div class="left">' +
+          '<span class="compare-meta">' + colCount + ' محصول در مقایسه</span>' +
+        '</div>' +
+        '<div class="right">' +
+          '<button type="button" class="btn btn-outline btn-sm" id="btnExportPdf">📄 خروجی PDF</button>' +
+          '<button type="button" class="btn btn-primary btn-sm" id="btnAiAnalysis">🧭 ناظر برند</button>' +
+        '</div>' +
       '</div>' +
       '<div class="compare-table-wrap" id="comparePrintArea">' +
-        '<table class="compare-table cols-' + Math.min(colCount, 5) + '">' +
+        '<table class="compare-table" id="compareTable" style="--product-cols:' + colCount + '">' +
           '<thead><tr>' + headCells + '</tr></thead>' +
           '<tbody>' + bodyRows + '</tbody>' +
         '</table>' +
@@ -209,6 +231,29 @@ async function initComparisonPage() {
           '<div class="modal-body" id="phBody">در حال بارگذاری...</div>' +
         '</div>' +
       '</div>';
+
+    resultEl.querySelectorAll('.cmp-remove').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const kind = btn.getAttribute('data-remove');
+        if (kind === 'main') {
+          selectA.value = '';
+          competitorsBox.innerHTML = '<span class="hint">اول محصول اصلی را انتخاب کن</span>';
+          resultEl.classList.add('hidden');
+          emptyEl.classList.remove('hidden');
+          return;
+        }
+        const id = btn.getAttribute('data-id');
+        const chip = competitorsBox.querySelector('input[value="' + id + '"]');
+        if (chip) {
+          chip.checked = false;
+          const label = chip.closest('.competitor-chip');
+          if (label) label.classList.remove('selected');
+        }
+        renderComparison();
+      });
+    });
 
     resultEl.querySelectorAll('.btn-history').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -227,7 +272,12 @@ async function initComparisonPage() {
     if (pdfBtn) pdfBtn.onclick = function () { window.print(); };
 
     const aiBtn = document.getElementById('btnAiAnalysis');
-    if (aiBtn) aiBtn.onclick = function () { showAiAnalysis(all, allKeys); };
+    if (aiBtn) {
+      aiBtn.onclick = function () {
+        if (typeof runOnPageAiAnalysis === 'function') runOnPageAiAnalysis(all, allKeys);
+        else if (typeof window.showAiAnalysis === 'function') window.showAiAnalysis(all, allKeys);
+      };
+    }
   }
 
   async function openPriceHistory(dkUrl, name) {
@@ -250,12 +300,9 @@ async function initComparisonPage() {
 
       const hasSeries = chart && Array.isArray(chart.series) && chart.series.length > 0 &&
         chart.series.some(function (s) { return (s.points || []).length > 0; });
-      const hasItems = chart && Array.isArray(chart.items) && chart.items.length > 0;
-      const historyOk = hasSeries || hasItems || (chart && chart.history_available === true);
 
       let html = '';
-
-      if (historyOk && hasSeries) {
+      if (hasSeries) {
         if (chart.current_price_toman) {
           html += '<p><strong>قیمت فعلی:</strong> ' + formatPrice(chart.current_price_toman) + '</p>';
         }
@@ -288,44 +335,19 @@ async function initComparisonPage() {
         if (details.lowest_price_30d_toman) {
           html += '<p><strong>کمترین قیمت ۳۰ روز اخیر:</strong> ' +
             formatPrice(details.lowest_price_30d_toman) + '</p>';
-          if (details.price_toman && details.lowest_price_30d_toman < details.price_toman) {
-            const diff = details.price_toman - details.lowest_price_30d_toman;
-            html += '<p style="color:#b45309;font-size:0.9rem">الان حدود ' +
-              formatPrice(diff) + ' گران‌تر از کف ۳۰ روزه است.</p>';
-          } else if (details.price_toman && details.lowest_price_30d_toman >= details.price_toman) {
-            html += '<p style="color:#16a34a;font-size:0.9rem">قیمت نزدیک به کف ۳۰ روز اخیر است.</p>';
-          }
         }
         if (details.cheaper_offer && details.cheaper_offer.price_toman) {
           html += '<p><strong>پیشنهاد ارزان‌تر:</strong> ' +
             formatPrice(details.cheaper_offer.price_toman) +
-            (details.cheaper_offer.seller ? ' · ' + details.cheaper_offer.seller : '') +
-            (details.cheaper_offer.saves_toman ? ' (صرفه‌جویی ' + formatPrice(details.cheaper_offer.saves_toman) + ')' : '') +
-            '</p>';
+            (details.cheaper_offer.seller ? ' · ' + details.cheaper_offer.seller : '') + '</p>';
         }
         html += '</div>';
         html += '<p style="margin-top:14px;font-size:0.85rem;color:var(--text-muted)">' +
-          'نمودار روزبه‌روز تاریخچه موقتاً از سمت API دیجی‌کالا در دسترس نیست؛ ' +
-          'خلاصه قیمت و کف ۳۰ روز از مشخصات محصول نمایش داده شد. ' +
           'نمودار کامل را در <a href="' + (details.url || dkUrl) + '" target="_blank" rel="noopener">صفحه دیجی‌کالا</a> ببین.</p>';
-        if (chart && chart.message) {
-          html += '<p style="font-size:0.75rem;color:#94a3b8">' + chart.message + '</p>';
-        }
       }
       body.innerHTML = html;
     } catch (err) {
       body.innerHTML = '<p style="color:#c00">' + (err.message || 'خطا') + '</p>';
-    }
-  }
-
-  function showAiAnalysis(all, allKeys) {
-    if (typeof runOnPageAiAnalysis === 'function') {
-      return runOnPageAiAnalysis(all, allKeys);
-    }
-    const box = document.getElementById('aiAnalysisBox');
-    if (box) {
-      box.classList.remove('hidden');
-      box.textContent = 'ماژول تحلیل بارگذاری نشده است.';
     }
   }
 

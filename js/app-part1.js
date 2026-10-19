@@ -10,10 +10,10 @@ async function loadData() {
   try {
     const res = await fetch('data/products.json');
     const data = await res.json();
-    return { categories: data.categories || [], products: data.products || [] };
+    return { categories: data.categories || [], products: data.products || [], disabledCategories: data.disabledCategories || [] };
   } catch (e) {
     console.error('Failed to load products.json', e);
-    return { categories: [], products: [] };
+    return { categories: [], products: [], disabledCategories: [] };
   }
 }
 
@@ -37,7 +37,8 @@ function formatLastUpdate(iso) {
 
 async function initComparisonPage() {
   const data = await loadData();
-  let { categories, products } = data;
+  let { categories, products, disabledCategories } = data;
+  disabledCategories = disabledCategories || [];
 
   const categorySelect = document.getElementById('categorySelect');
   const selectA = document.getElementById('productA');
@@ -48,6 +49,7 @@ async function initComparisonPage() {
   if (!selectA) return;
 
   categories.forEach(cat => {
+    if ((disabledCategories || []).indexOf(cat) >= 0) return;
     categorySelect.innerHTML += '<option value="' + cat + '">' + cat + '</option>';
   });
 

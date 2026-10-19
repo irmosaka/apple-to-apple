@@ -1,7 +1,8 @@
 
 async function initAdminPage() {
   let data = await loadData();
-  let { categories, products } = data;
+  let { categories, products, disabledCategories } = data;
+  disabledCategories = disabledCategories || [];
   const listEl = document.getElementById('productList');
   const modal = document.getElementById('productModal');
   const form = document.getElementById('productForm');
@@ -19,7 +20,8 @@ async function initAdminPage() {
     toast.className = 'toast ' + type + ' show';
     setTimeout(function () { toast.classList.remove('show'); }, 3500);
   }
-  function persist() { saveData({ categories: categories, products: products }); }
+  function persist() { saveData({ categories: categories, products: products, disabledCategories: disabledCategories }); }
+  function isCatDisabled(c) { return disabledCategories.indexOf(c) >= 0; }
 
   function formatLastUpdate(iso) {
     if (!iso) return '';
@@ -73,7 +75,10 @@ async function initAdminPage() {
     const sel = form.category;
     sel.innerHTML = '<option value="">انتخاب...</option>';
     categories.forEach(function (c) {
-      sel.innerHTML += '<option value="' + c + '"' + (c === selected ? ' selected' : '') + '>' + c + '</option>';
+      const dis = isCatDisabled(c);
+      if (dis && c !== selected) return;
+      const label = dis ? (c + ' (غیرفعال)') : c;
+      sel.innerHTML += '<option value="' + c + '"' + (c === selected ? ' selected' : '') + '>' + label + '</option>';
     });
   }
 
@@ -268,7 +273,7 @@ async function initAdminPage() {
   });
 
   window.exportJSON = function () {
-    const blob = new Blob([JSON.stringify({ categories: categories, products: products }, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ categories: categories, products: products, disabledCategories: disabledCategories }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'products.json'; a.click();
@@ -287,6 +292,7 @@ async function initAdminPage() {
           const parsed = JSON.parse(ev.target.result);
           categories = parsed.categories || [];
           products = parsed.products || parsed;
+          disabledCategories = parsed.disabledCategories || [];
           persist(); renderList(); renderCategories(); showToast('وارد شد');
         } catch (err) { showToast('فایل نامعتبر', 'error'); }
       };
@@ -347,12 +353,16 @@ async function initAdminPage() {
     }
     box.innerHTML = categories.map(function (c, i) {
       const count = products.filter(function (p) { return p.category === c; }).length;
-      return '<div class="category-row" data-cat="' + c.replace(/"/g, '"') + '">' +
+      const dis = isCatDisabled(c);
+      return '<div class="category-row' + (dis ? ' is-disabled' : '') + '">' +
         '<div class="category-row-info">' +
           '<span class="category-row-name">' + c + '</span>' +
+          (dis ? '<span class="category-row-badge">غیرفعال</span>' : '<span class="category-row-badge active">فعال</span>') +
           '<span class="category-row-count">' + count + ' محصول</span>' +
         '</div>' +
         '<div class="category-row-actions">' +
+          '<button type="button" class="btn btn-outline btn-sm" data-action="toggle" data-idx="' + i + '">' +
+            (dis ? 'فعال‌کردن' : 'غیرفعال') + '</button>' +
           '<button type="button" class="btn btn-outline btn-sm" data-action="rename" data-idx="' + i + '">تغییر نام</button>' +
           '<button type="button" class="btn btn-danger btn-sm" data-action="delete" data-idx="' + i + '">حذف</button>' +
         '</div>' +
@@ -365,6 +375,22 @@ async function initAdminPage() {
         const action = btn.getAttribute('data-action');
         const oldName = categories[idx];
         if (!oldName) return;
+
+        if (action === 'toggle') {
+          const pos = disabledCategories.indexOf(oldName);
+          if (pos >= 0) {
+            disabledCategories.splice(pos, 1);
+            showToast('دسته «' + oldName + '» فعال شد');
+          } else {
+            disabledCategories.push(oldName);
+            showToast('دسته «' + oldName + '» غیرفعال شد (در مقایسه دیده نمی‌شود)');
+          }
+          persist();
+          fillCategorySelect('');
+          renderCategories();
+          return;
+        }
+
         if (action === 'rename') {
           const next = prompt('نام جدید دسته «' + oldName + '»:', oldName);
           if (!next || !next.trim()) return;
@@ -378,6 +404,8 @@ async function initAdminPage() {
           products.forEach(function (p) {
             if (p.category === oldName) p.category = name;
           });
+          const dpos = disabledCategories.indexOf(oldName);
+          if (dpos >= 0) disabledCategories[dpos] = name;
           persist();
           fillCategorySelect(name);
           renderList();
@@ -390,6 +418,7 @@ async function initAdminPage() {
             : 'دسته «' + oldName + '» حذف شود؟';
           if (!confirm(msg)) return;
           categories.splice(idx, 1);
+          disabledCategories = disabledCategories.filter(function (x) { return x !== oldName; });
           products.forEach(function (p) {
             if (p.category === oldName) p.category = '';
           });

@@ -3,50 +3,58 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>اپل‌تو‌اپل | مقایسه محصول به محصول</title>
+  <title>اپل‌تو‌اپل | ابزار فروش اسنوا و دوو</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/compare.css">
-  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
   <header class="header">
     <div class="container">
       <div class="logo"><span class="logo-icon">⚖️</span><h1>اپل‌تو‌اپل</h1></div>
       <nav>
-        <a href="index.html" class="active">مقایسه</a>
-        <a href="admin.html">داشبورد مدیریت</a>
+        <a href="index.html" class="active">مقایسه فروش</a>
+        <a href="admin.html">داشبورد</a>
       </nav>
     </div>
   </header>
   <main class="container">
-    <section class="hero">
-      <h2>مقایسه شفاف محصول به محصول</h2>
-      <p>برندهای اسنوا و دوو را کنار رقبا بگذار و با یک نگاه تصمیم بگیر</p>
+    <section class="hero hero-sales">
+      <p class="hero-eyebrow">ابزار پشتیبانی فروش · اسنوا و دوو</p>
+      <h2>مقایسه برند ما با رقبا</h2>
+      <p>محصول اصلی همیشه از پورتفوی اسنوا یا دوو انتخاب می‌شود؛ رقبا را کنارش بگذار و با یک نگاه نقطه تمایز را بگو.</p>
     </section>
+
+    <div id="freshnessBar" class="freshness-bar" hidden>
+      <span id="freshnessText">آخرین به‌روزرسانی قیمت: —</span>
+      <span class="freshness-hint">قبل از جلسه فروش، از داشبورد قیمت‌ها را تازه کنید.</span>
+    </div>
+
     <section class="compare-controls">
       <div class="select-group">
         <label for="categorySelect">دسته‌بندی</label>
-        <select id="categorySelect"><option value="">همه دسته‌ها</option></select>
+        <select id="categorySelect"><option value="">همه دسته‌های فعال</option></select>
       </div>
       <div class="select-group">
-        <label for="productA">محصول اصلی</label>
+        <label for="productA">محصول ما (اسنوا / دوو)</label>
         <select id="productA"><option value="">انتخاب کنید...</option></select>
       </div>
       <div class="select-group" style="flex:1.5">
-        <label>رقبا (چندتایی)</label>
+        <label>رقبای بازار <span id="compCountBadge" class="comp-count" hidden></span></label>
         <div id="competitorsCheckboxes" class="competitors-box">
-          <span class="hint">اول محصول اصلی را انتخاب کن</span>
+          <span class="hint">اول محصول ما را انتخاب کن</span>
         </div>
       </div>
     </section>
+
     <section id="comparisonResult" class="comparison-result hidden"></section>
     <section id="emptyState" class="empty-state">
       <div class="empty-icon">📊</div>
-      <h3>محصول اصلی و حداقل یک رقیب انتخاب کن</h3>
-      <p>از منوی بالا دسته، محصول و رقبا را مشخص کن</p>
+      <h3>از محصول برند ما شروع کن</h3>
+      <p>۱) دسته را بزن &nbsp;·&nbsp; ۲) یک محصول اسنوا یا دوو انتخاب کن &nbsp;·&nbsp; ۳) رقبا را تیک بزن</p>
     </section>
   </main>
-  <footer class="footer"><div class="container"><p>مقایسه شفاف برای تصمیم بهتر · اسنوا و دوو</p></div></footer>
+  <footer class="footer"><div class="container"><p>ابزار داخلی فروش · مقایسه شفاف برای دفاع از برند اسنوا و دوو</p></div></footer>
   <script src="js/digikala.js"></script>
   <script src="js/app-part1.js"></script>
   <script src="js/ai.js"></script>

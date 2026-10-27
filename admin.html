@@ -13,7 +13,7 @@
     <div class="container">
       <div class="logo"><span class="logo-mark" aria-hidden="true">⚖️</span><h1>اپل‌تو‌اپل</h1></div>
       <nav>
-        <a href="index.html">مقایسه</a>
+        <a href="index.html">مقایسه فروش</a>
         <a href="admin.html" class="active">داشبورد</a>
       </nav>
     </div>
@@ -29,21 +29,12 @@
           <h1>اپل‌تو‌اپل</h1>
           <p class="login-subtitle">ورود به پنل مدیریت محصولات</p>
         </div>
-
         <div id="loginError" class="login-alert" role="alert" hidden></div>
-
         <form id="loginForm" class="login-form" onsubmit="event.preventDefault(); tryAdminLogin();">
           <div class="field">
             <label for="adminPassword">رمز عبور</label>
             <div class="field-input">
-              <input
-                type="password"
-                id="adminPassword"
-                name="password"
-                placeholder="رمز پنل را وارد کنید"
-                autocomplete="current-password"
-                autofocus
-              >
+              <input type="password" id="adminPassword" name="password" placeholder="رمز پنل را وارد کنید" autocomplete="current-password" autofocus>
               <button type="button" class="field-toggle" id="togglePwd" aria-label="نمایش رمز" title="نمایش / مخفی">👁</button>
             </div>
           </div>
@@ -52,10 +43,9 @@
             <span class="btn-loading" hidden>در حال ورود…</span>
           </button>
         </form>
-
-        <p class="login-hint">دسترسی فقط برای مدیر. در صورت فراموشی رمز، از بخش Local Storage مرورگر ریست کنید.</p>
+        <p class="login-hint">دسترسی فقط برای مدیر.</p>
       </div>
-      <p class="login-footer">مقایسه شفاف محصولات · اسنوا و دوو</p>
+      <p class="login-footer">ابزار فروش · اسنوا و دوو</p>
     </div>
   </div>
 
@@ -63,7 +53,7 @@
     <div class="admin-header">
       <div>
         <h2>مدیریت محصولات</h2>
-        <p class="admin-lead">افزودن، ویرایش و به‌روزرسانی قیمت رقبا</p>
+        <p class="admin-lead">اسنوا/دوو = محصول ما · بقیه = رقیب (خودکار)</p>
       </div>
       <div class="admin-header-actions">
         <button type="button" class="btn btn-ghost btn-sm" onclick="changeAdminPassword()">تغییر رمز</button>
@@ -71,88 +61,52 @@
         <button type="button" class="btn btn-primary" onclick="openAddModal()">+ افزودن محصول</button>
       </div>
     </div>
-
     <div class="export-box">
-      <p><strong>پشتیبان‌گیری:</strong> برای ماندگار شدن روی گیت‌هاب، Export بگیرید و فایل را جایگزین <code>data/products.json</code> کنید.</p>
+      <p><strong>پشتیبان‌گیری:</strong> Export بگیرید و جایگزین <code>data/products.json</code> کنید.</p>
       <div class="export-actions">
         <button type="button" class="btn btn-success" onclick="exportJSON()">⬇ Export JSON</button>
         <button type="button" class="btn btn-outline" onclick="importJSON()">⬆ Import JSON</button>
         <button type="button" class="btn btn-primary" id="btnRefreshAllPrices" onclick="refreshAllPrices()">🔄 به‌روزرسانی همه قیمت‌ها</button>
       </div>
     </div>
-
     <section class="category-manager" id="categoryManager">
       <div class="cat-manager-header">
         <h3>مدیریت دسته‌بندی‌ها</h3>
         <button type="button" class="btn btn-outline btn-sm" onclick="addNewCategory()">+ دسته جدید</button>
       </div>
-      <p class="cat-manager-hint">تغییر نام، غیرفعال (مخفی در مقایسه) یا حذف. غیرفعال‌کردن محصولات را پاک نمی‌کند.</p>
+      <p class="cat-manager-hint">تغییر نام، غیرفعال یا حذف. غیرفعال‌کردن محصولات را پاک نمی‌کند.</p>
       <div id="categoryList" class="category-list"></div>
     </section>
-
     <div id="productList" class="product-list"></div>
   </main>
 
   <div class="modal-overlay" id="productModal">
     <div class="modal">
-      <div class="modal-header">
-        <h3 id="modalTitle">افزودن محصول</h3>
-        <button type="button" class="modal-close" onclick="closeModal()" aria-label="بستن">×</button>
-      </div>
+      <div class="modal-header"><h3 id="modalTitle">افزودن محصول</h3><button type="button" class="modal-close" onclick="closeModal()" aria-label="بستن">×</button></div>
       <form id="productForm">
         <div class="modal-body">
           <div class="form-group"><label>نام *</label><input type="text" name="name" required></div>
           <div class="form-row">
-            <div class="form-group"><label>برند</label><input type="text" name="brand"></div>
+            <div class="form-group"><label>برند</label><input type="text" name="brand" placeholder="اسنوا / دوو / رقیب"></div>
             <div class="form-group"><label>قیمت</label><input type="number" name="price"></div>
           </div>
           <div class="form-row">
-            <div class="form-group">
-              <label>نوع</label>
-              <select name="type">
-                <option value="own">محصول من</option>
-                <option value="competitor">رقیب</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>دسته</label>
-              <div class="inline-field">
-                <select name="category"></select>
-                <button type="button" class="btn btn-outline btn-sm" onclick="addNewCategory()">+</button>
-              </div>
-            </div>
+            <div class="form-group"><label>نوع (پیشنهادی)</label><select name="type"><option value="own">محصول ما</option><option value="competitor">رقیب</option></select></div>
+            <div class="form-group"><label>دسته</label><div class="inline-field"><select name="category"></select><button type="button" class="btn btn-outline btn-sm" onclick="addNewCategory()">+</button></div></div>
           </div>
           <div class="form-group"><label>تصویر</label><input type="url" name="image"></div>
-          <div class="form-group">
-            <label>لینک دیجی‌کالا</label>
-            <div class="inline-field">
-              <input type="url" name="digikalaUrl">
-              <button type="button" class="btn btn-primary btn-sm" onclick="tryFetchDigikala()">دریافت</button>
-            </div>
-          </div>
-          <div class="form-group" id="competitorsSection">
-            <label>رقبا</label>
-            <div id="competitorsSelectContainer" class="competitors-box"></div>
-          </div>
-          <div class="form-group">
-            <label>ویژگی‌ها</label>
-            <div class="features-editor">
-              <div id="featuresContainer"></div>
-              <button type="button" class="btn btn-outline btn-sm" onclick="addFeatureRow()">+ ویژگی</button>
-            </div>
-          </div>
+          <div class="form-group"><label>لینک دیجی‌کالا</label><div class="inline-field"><input type="url" name="digikalaUrl"><button type="button" class="btn btn-primary btn-sm" onclick="tryFetchDigikala()">دریافت</button></div></div>
+          <div class="form-group" id="competitorsSection"><label>رقبا</label><div id="competitorsSelectContainer" class="competitors-box"></div></div>
+          <div class="form-group"><label>ویژگی‌ها</label><div class="features-editor"><div id="featuresContainer"></div><button type="button" class="btn btn-outline btn-sm" onclick="addFeatureRow()">+ ویژگی</button></div></div>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline" onclick="closeModal()">انصراف</button>
-          <button type="submit" class="btn btn-primary">ذخیره</button>
-        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-outline" onclick="closeModal()">انصراف</button><button type="submit" class="btn btn-primary">ذخیره</button></div>
       </form>
     </div>
   </div>
-
   <div id="toast" class="toast" role="status"></div>
   <script src="js/digikala.js"></script>
-  <script src="js/app-part1.js"></script>
+  <script src="js/app-business-a.js"></script>
+  <script src="js/app-business-b.js"></script>
   <script src="js/app-part2.js"></script>
   <script src="js/admin-auth.js"></script>
 </body>

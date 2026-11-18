@@ -1,4 +1,5 @@
 // ===================== Digikala Integration (via digikala-mcp) =====================
+// Cache-bust note: bump ?v= on script tags in HTML when this file changes.
 const DIGIKALA_MCP = 'https://digikala-mcp.mmdju.workers.dev/mcp';
 
 function extractDkpId(url) {
@@ -11,14 +12,30 @@ function extractDkpId(url) {
 }
 
 function isUpstreamBlock(msg) {
-  return /HTTP 403|rejected the request|CDN keeps asking|temporarily not serving|bot|forbidden/i.test(String(msg || ''));
+  const s = String(msg || '');
+  return /HTTP\s*403|rejected the request|CDN keeps asking|temporarily not serving|bot|forbidden|۴۰۳|مسدود/i.test(s);
 }
 
 function isRetryable(msg) {
   return isUpstreamBlock(msg) || /rate-limit|15-30|temporarily|429/i.test(String(msg || ''));
 }
 
-async function mcpCall(toolName, args, retries = 2) {
+function friendlyDigikalaError(msg) {
+  const s = String(msg || '');
+  if (isUpstreamBlock(s)) {
+    return 'دیجی‌کالا موقتاً دسترسی را مسدود کرده (۴۰۳). چند دقیقه صبر کنید؛ اگر ادامه داشت از «جستجو» یا قیمت دستی استفاده کنید.';
+  }
+  if (/429|rate/i.test(s)) {
+    return 'محدودیت تعداد درخواست. ۲۰–۳۰ ثانیه صبر کنید و دوباره بزنید.';
+  }
+  if (/Digikala rejected|Rephrase or narrow/i.test(s)) {
+    return 'دیجی‌کالا درخواست را رد کرد (۴۰۳). لطفاً چند دقیقه بعد دوباره تلاش کنید.';
+  }
+  return s || 'خطا در ارتباط با دیجی‌کالا';
+}
+
+async function mcpCall(toolName, args, retries) {
+  if (retries == null) retries = 1;
   let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -37,12 +54,11 @@ async function mcpCall(toolName, args, retries = 2) {
       });
 
       if (res.status === 429) {
-        const wait = parseInt(res.headers.get('retry-after') || '20', 10) * 1000;
         if (attempt < retries) {
-          await new Promise(r => setTimeout(r, Math.min(wait, 30000)));
+          await new Promise(r => setTimeout(r, 20000));
           continue;
         }
-        throw new Error('محدودیت نرخ سرویس (۴۲۹). کمی صبر کنید و دوباره بزنید.');
+        throw new Error(friendlyDigikalaError('429'));
       }
 
       const text = await res.text();
@@ -55,12 +71,8 @@ async function mcpCall(toolName, args, retries = 2) {
       if (!payload) {
         try { payload = JSON.parse(text); } catch (_) {}
       }
-
       if (!payload) throw new Error('پاسخ نامعتبر از سرویس دیجی‌کالا');
-
-      if (payload.error) {
-        throw new Error(payload.error.message || 'خطای MCP');
-      }
+      if (payload.error) throw new Error(friendlyDigikalaError(payload.error.message || 'خطای MCP'));
 
       const content = payload.result && payload.result.content && payload.result.content[0]
         ? payload.result.content[0].text
@@ -68,13 +80,10 @@ async function mcpCall(toolName, args, retries = 2) {
 
       if (payload.result && payload.result.isError) {
         const msg = content || 'خطا در دریافت داده';
-        lastErr = new Error(msg);
+        lastErr = new Error(friendlyDigikalaError(msg));
         if (isRetryable(msg) && attempt < retries) {
-          await new Promise(r => setTimeout(r, isUpstreamBlock(msg) ? 8000 : 20000));
+          await new Promise(r => setTimeout(r, isUpstreamBlock(msg) ? 5000 : 15000));
           continue;
-        }
-        if (isUpstreamBlock(msg)) {
-          throw new Error('دیجی‌کالا درخواست را با خطای ۴۰۳ رد کرد (مسدودسازی موقت CDN). چند دقیقه صبر کنید یا از مسیر جایگزین قیمت استفاده می‌شود.');
         }
         throw lastErr;
       }
@@ -83,9 +92,13 @@ async function mcpCall(toolName, args, retries = 2) {
       return JSON.parse(content);
     } catch (e) {
       lastErr = e;
-      if (attempt < retries && isRetryable(e.message)) {
-        await new Promise(r => setTimeout(r, 8000));
+      const m = e && e.message ? e.message : String(e);
+      if (attempt < retries && isRetryable(m)) {
+        await new Promise(r => setTimeout(r, 5000));
         continue;
+      }
+      if (e && e.message && /Digikala rejected|HTTP 403|Rephrase/i.test(e.message)) {
+        throw new Error(friendlyDigikalaError(e.message));
       }
       throw e;
     }
@@ -93,7 +106,6 @@ async function mcpCall(toolName, args, retries = 2) {
   throw lastErr || new Error('خطای ناشناخته MCP');
 }
 
-/** Extract latest price from product_price_chart response */
 function priceFromChart(chart) {
   if (!chart) return null;
   if (chart.current_price_toman) return chart.current_price_toman;
@@ -101,8 +113,7 @@ function priceFromChart(chart) {
   let best = null;
   let bestDay = '';
   variants.forEach(function (v) {
-    const points = v.points || [];
-    points.forEach(function (pt) {
+    (v.points || []).forEach(function (pt) {
       const day = String(pt.day || pt.date || '');
       const price = pt.price_toman || pt.price;
       if (price && day >= bestDay) {
@@ -110,27 +121,52 @@ function priceFromChart(chart) {
         best = price;
       }
     });
-    if (!points.length && v.cheapest_in_window_toman) {
-      if (best == null) best = v.cheapest_in_window_toman;
+    if (!(v.points || []).length && v.cheapest_in_window_toman && best == null) {
+      best = v.cheapest_in_window_toman;
     }
   });
   return best;
 }
 
+async function priceFromSearch(id, hintName) {
+  const queries = [];
+  if (hintName && String(hintName).trim()) queries.push(String(hintName).trim().slice(0, 80));
+  queries.push('dkp-' + id);
+  queries.push(String(id));
+
+  for (let q = 0; q < queries.length; q++) {
+    try {
+      const data = await mcpCall('search_digikala', { query: queries[q], limit: 20 }, 0);
+      const items = (data && data.items) || [];
+      const hit = items.find(function (it) { return Number(it.id) === Number(id); });
+      if (hit && hit.price_toman) {
+        return {
+          id: id,
+          price_toman: hit.price_toman,
+          title: hit.title,
+          url: hit.url || ('https://www.digikala.com/product/dkp-' + id + '/'),
+          image: hit.image || '',
+          brand: hit.brand || '',
+          source: 'search_digikala'
+        };
+      }
+    } catch (e) {
+      console.warn('search fallback failed', queries[q], e);
+    }
+  }
+  return null;
+}
+
 function mapDigikalaToProduct(d, type) {
   type = type || 'competitor';
   const features = {};
-
   if (Array.isArray(d.specs)) {
     d.specs.forEach(function (group) {
       (group.attributes || []).forEach(function (attr) {
-        if (attr.title && attr.value) {
-          features[attr.title] = attr.value;
-        }
+        if (attr.title && attr.value) features[attr.title] = attr.value;
       });
     });
   }
-
   if (d.warranty) features['گارانتی'] = d.warranty;
   if (d.rating_stars) {
     features['امتیاز'] = d.rating_count
@@ -139,32 +175,11 @@ function mapDigikalaToProduct(d, type) {
   }
   if (d.seller && d.seller.name) features['فروشنده'] = d.seller.name;
 
-  const aliases = [
-    ['رم', ['حافظه RAM', 'حافظه رم', 'RAM']],
-    ['حافظه داخلی', ['حافظه داخلی', 'ظرفیت حافظه داخلی']],
-    ['باتری', ['ظرفیت باتری', 'باتری']],
-    ['شارژ سریع', ['توان شارژ', 'شارژ سریع']],
-    ['صفحه نمایش', ['اندازه صفحه نمایش', 'صفحه نمایش', 'نوع صفحه نمایش']],
-    ['دوربین اصلی', ['رزولوشن دوربین اصلی', 'دوربین اصلی']],
-    ['پردازنده', ['تراشه', 'پردازنده', 'چیپست']]
-  ];
-  aliases.forEach(function (pair) {
-    const canonical = pair[0];
-    const keys = pair[1];
-    if (features[canonical]) return;
-    for (let i = 0; i < keys.length; i++) {
-      if (features[keys[i]]) {
-        features[canonical] = features[keys[i]];
-        break;
-      }
-    }
-  });
-
   return {
     id: 'dkp-' + d.id,
-    name: d.title || '',
+    name: d.title || d.name || '',
     brand: d.brand || '',
-    category: d.category || (d.category_path && d.category_path[d.category_path.length - 1]) || '',
+    category: d.category || '',
     price: d.price_toman || 0,
     image: d.image || '',
     type: type,
@@ -174,54 +189,12 @@ function mapDigikalaToProduct(d, type) {
   };
 }
 
-/**
- * Fetch product. If product_details is blocked (403), fall back to
- * product_price_chart for price-only refresh.
- */
-async function fetchDigikalaProduct(urlOrId) {
+async function fetchDigikalaPriceOnly(urlOrId, hintName) {
   const id = typeof urlOrId === 'number' ? urlOrId : extractDkpId(urlOrId);
   if (!id) throw new Error('آیدی محصول (dkp-...) در لینک پیدا نشد');
 
   try {
-    const details = await mcpCall('product_details', {
-      id: id,
-      include_specs: true,
-      include_comments: 0
-    }, 1);
-    return { raw: details, product: mapDigikalaToProduct(details), source: 'product_details' };
-  } catch (err) {
-    if (!isUpstreamBlock(err.message) && !/۴۰۳|403/.test(err.message)) {
-      throw err;
-    }
-    // Fallback: price chart still works when product_details is blocked
-    const chart = await mcpCall('product_price_chart', { id: id }, 1);
-    const price = priceFromChart(chart);
-    if (price == null) {
-      throw new Error('دیجی‌کالا جزئیات محصول را مسدود کرده و از نمودار هم قیمت استخراج نشد. چند دقیقه بعد دوباره تلاش کنید.');
-    }
-    const raw = {
-      id: id,
-      price_toman: price,
-      url: 'https://www.digikala.com/product/dkp-' + id + '/',
-      _source: 'product_price_chart',
-      _note: 'قیمت از آخرین نقطه نمودار (product_details موقتاً ۴۰۳ می‌دهد)'
-    };
-    return {
-      raw: raw,
-      product: mapDigikalaToProduct(raw),
-      source: 'product_price_chart'
-    };
-  }
-}
-
-/** Price-only refresh — prefers chart first when details are flaky */
-async function fetchDigikalaPriceOnly(urlOrId) {
-  const id = typeof urlOrId === 'number' ? urlOrId : extractDkpId(urlOrId);
-  if (!id) throw new Error('آیدی محصول (dkp-...) در لینک پیدا نشد');
-
-  // Chart is currently more reliable against Digikala 403
-  try {
-    const chart = await mcpCall('product_price_chart', { id: id }, 1);
+    const chart = await mcpCall('product_price_chart', { id: id }, 0);
     const price = priceFromChart(chart);
     if (price != null) {
       return {
@@ -232,19 +205,50 @@ async function fetchDigikalaPriceOnly(urlOrId) {
       };
     }
   } catch (e) {
-    console.warn('price_chart failed, trying product_details', e);
+    console.warn('price_chart failed', e && e.message);
   }
 
-  const details = await mcpCall('product_details', {
-    id: id,
-    include_specs: false,
-    include_comments: 0
-  }, 1);
-  if (!details.price_toman) throw new Error('قیمت در پاسخ دیجی‌کالا نبود');
-  return {
-    id: id,
-    price_toman: details.price_toman,
-    url: details.url || ('https://www.digikala.com/product/dkp-' + id + '/'),
-    source: 'product_details'
-  };
+  try {
+    const details = await mcpCall('product_details', {
+      id: id, include_specs: false, include_comments: 0
+    }, 0);
+    if (details && details.price_toman) {
+      return {
+        id: id,
+        price_toman: details.price_toman,
+        url: details.url || ('https://www.digikala.com/product/dkp-' + id + '/'),
+        source: 'product_details'
+      };
+    }
+  } catch (e) {
+    console.warn('product_details failed', e && e.message);
+  }
+
+  const fromSearch = await priceFromSearch(id, hintName);
+  if (fromSearch) return fromSearch;
+
+  throw new Error(friendlyDigikalaError('HTTP 403'));
+}
+
+async function fetchDigikalaProduct(urlOrId, hintName) {
+  const id = typeof urlOrId === 'number' ? urlOrId : extractDkpId(urlOrId);
+  if (!id) throw new Error('آیدی محصول (dkp-...) در لینک پیدا نشد');
+
+  try {
+    const details = await mcpCall('product_details', {
+      id: id, include_specs: true, include_comments: 0
+    }, 0);
+    return { raw: details, product: mapDigikalaToProduct(details), source: 'product_details' };
+  } catch (err) {
+    const priceInfo = await fetchDigikalaPriceOnly(id, hintName);
+    const raw = {
+      id: id,
+      price_toman: priceInfo.price_toman,
+      title: priceInfo.title || '',
+      image: priceInfo.image || '',
+      url: priceInfo.url,
+      _source: priceInfo.source
+    };
+    return { raw: raw, product: mapDigikalaToProduct(raw), source: priceInfo.source };
+  }
 }
